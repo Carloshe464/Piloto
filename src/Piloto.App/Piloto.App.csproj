@@ -8,6 +8,11 @@
     <AssemblyName>Piloto</AssemblyName>
   </PropertyGroup>
 
+  <!-- O SDK de WPF não inclui System.IO nos usings implícitos; adiciona globalmente. -->
+  <ItemGroup>
+    <Using Include="System.IO" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
