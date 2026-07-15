@@ -1,0 +1,58 @@
+; Inno Setup 6 — instalador do Piloto (publish self-contained; não exige .NET na máquina destino).
+; Gera installer\Output\PilotoSetup-<versao>.exe. Rode via scripts\build-installer.ps1 ou no CI.
+
+#define MyAppName "Piloto"
+#define MyAppVersion "0.1.0"
+#define MyAppPublisher "Piloto"
+#define MyAppExeName "Piloto.exe"
+
+[Setup]
+AppId={{9C2B4E7A-1F3D-4B8E-9A6C-0C1D2E3F4A5B}}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+DisableProgramGroupPage=yes
+OutputDir=Output
+OutputBaseFilename=PilotoSetup-{#MyAppVersion}
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+PrivilegesRequired=admin
+UninstallDisplayIcon={app}\{#MyAppExeName}
+
+[Languages]
+Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "Criar um atalho na área de trabalho"; GroupDescription: "Atalhos adicionais:"
+Name: "startupicon"; Description: "Iniciar o Piloto com o Windows"; GroupDescription: "Inicialização:"
+
+[Files]
+; Saída do 'dotnet publish -c Release -r win-x64 --self-contained true -o publish/'
+Source: "..\publish\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Extensão do navegador (para carregar sem compactação ou distribuir por GPO)
+Source: "..\extension\*"; DestDir: "{app}\extension"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Script de download dos modelos (para rodar direto na máquina de teste)
+Source: "..\scripts\download-models.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+
+[Icons]
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\Baixar modelos (Whisper + Gemma)"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
+  Parameters: "-NoExit -ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\download-models.ps1"""; \
+  WorkingDir: "{app}\scripts"; \
+  Comment: "Baixa os modelos para %LOCALAPPDATA%\Piloto\models"
+Name: "{group}\Desinstalar {#MyAppName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; \
+  ValueName: "Piloto"; ValueData: """{app}\{#MyAppExeName}"""; \
+  Flags: uninsdeletevalue; Tasks: startupicon
+
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Description: "Executar o {#MyAppName} agora"; \
+  Flags: nowait postinstall skipifsilent

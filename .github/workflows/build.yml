@@ -1,0 +1,57 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore Piloto.sln
+
+      - name: Build (solução inteira)
+        run: dotnet build Piloto.sln -c Release --no-restore
+
+      - name: Testes
+        run: dotnet test tests/Piloto.Tests -c Release --no-build --logger trx --results-directory TestResults
+
+      - name: Publicar resultados de teste
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/**/*.trx
+
+      - name: Publish self-contained
+        run: >
+          dotnet publish src/Piloto.App -c Release -r win-x64
+          --self-contained true -p:PublishSingleFile=false
+          -o publish/
+
+      - name: Instalador (Inno Setup)
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer/setup.iss
+
+      - name: Artifact do instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: piloto-setup
+          path: installer/Output/PilotoSetup-*.exe
+
+      - name: Release (somente em tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/Output/PilotoSetup-*.exe

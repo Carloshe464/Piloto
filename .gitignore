@@ -1,0 +1,32 @@
+# Build
+bin/
+obj/
+publish/
+[Bb]uild/
+artifacts/
+
+# Installer output
+installer/Output/
+
+# Modelos (baixados, não versionados)
+models/
+*.gguf
+*.bin
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# SO
+Thumbs.db
+desktop.ini
+
+# Dados locais / bancos de teste
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log

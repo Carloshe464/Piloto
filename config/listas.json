@@ -1,0 +1,31 @@
+{
+  "motivo_contato": [
+    "Dúvida",
+    "Reclamação",
+    "Solicitação de cancelamento",
+    "Segunda via de boleto",
+    "Atualização de cadastro",
+    "Suporte técnico",
+    "Status de pedido",
+    "Negociação de dívida",
+    "Elogio",
+    "Outro"
+  ],
+  "produto": [
+    "Plano Básico",
+    "Plano Premium",
+    "Aplicativo",
+    "Site",
+    "Cartão",
+    "Empréstimo",
+    "Seguro",
+    "Não se aplica"
+  ],
+  "status": [
+    "Resolvido",
+    "Pendente de retorno",
+    "Encaminhado para outra área",
+    "Aguardando cliente",
+    "Não resolvido"
+  ]
+}

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Piloto.App</RootNamespace>
+    <AssemblyName>Piloto</AssemblyName>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Piloto.Core\Piloto.Core.csproj" />
+    <ProjectReference Include="..\Piloto.Rules\Piloto.Rules.csproj" />
+    <ProjectReference Include="..\Piloto.Data\Piloto.Data.csproj" />
+    <ProjectReference Include="..\Piloto.Audio\Piloto.Audio.csproj" />
+    <ProjectReference Include="..\Piloto.Transcription\Piloto.Transcription.csproj" />
+    <ProjectReference Include="..\Piloto.Llm\Piloto.Llm.csproj" />
+    <ProjectReference Include="..\Piloto.Bridge\Piloto.Bridge.csproj" />
+  </ItemGroup>
+
+  <!-- Config padrão empacotada; semeada em %LOCALAPPDATA%\Piloto\config na 1ª execução -->
+  <ItemGroup>
+    <Content Include="..\..\config\appsettings.json" Link="config\appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\config\listas.json" Link="config\listas.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\config\glossario.txt" Link="config\glossario.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

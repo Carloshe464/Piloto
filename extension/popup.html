@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Segoe UI, system-ui, sans-serif; width: 260px; margin: 0; padding: 14px; background: #0f172a; color: #e2e8f0; }
+    h1 { font-size: 14px; margin: 0 0 10px; }
+    label { display: block; font-size: 12px; color: #94a3b8; margin: 10px 0 4px; }
+    input { width: 100%; box-sizing: border-box; padding: 6px 8px; background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 4px; }
+    button { margin-top: 12px; width: 100%; padding: 8px; background: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 4px; cursor: pointer; font-weight: 600; }
+    .status { margin-top: 12px; font-size: 12px; }
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: #6b7280; }
+    .ok { background: #22c55e; } .bad { background: #dc2626; } .wait { background: #f59e0b; }
+  </style>
+</head>
+<body>
+  <h1>Piloto — Ponte Zendesk</h1>
+  <label for="porta">Porta do app (bridge)</label>
+  <input id="porta" type="number" min="1" max="65535" value="8517" />
+  <button id="salvar">Salvar e reconectar</button>
+  <div class="status"><span id="dot" class="dot wait"></span><span id="txt">verificando…</span></div>
+  <script src="popup.js"></script>
+</body>
+</html>

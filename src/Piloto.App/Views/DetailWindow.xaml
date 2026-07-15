@@ -1,0 +1,74 @@
+<Window x:Class="Piloto.App.Views.DetailWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Detalhe da ligação"
+        Height="700" Width="760"
+        Background="{StaticResource Fundo}"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Texto}" />
+            <Setter Property="Margin" Value="0,2,0,2" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="Rotulo" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextoFraco}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,10,0,2" />
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource Painel}" />
+            <Setter Property="Foreground" Value="{StaticResource Texto}" />
+            <Setter Property="BorderBrush" Value="#334155" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="TxtCabecalho" Grid.Row="0" FontSize="16" FontWeight="Bold" />
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+            <StackPanel>
+                <Border x:Name="PanelRevisao" Background="#78350f" CornerRadius="6" Padding="10" Margin="0,0,0,8"
+                        Visibility="Collapsed">
+                    <TextBlock x:Name="TxtRevisao" Foreground="#fde68a" />
+                </Border>
+
+                <TextBlock Text="RESUMO" Style="{StaticResource Rotulo}" />
+                <TextBlock x:Name="TxtResumo" />
+                <TextBlock x:Name="TxtMotivo" />
+                <TextBlock x:Name="TxtProduto" />
+                <TextBlock x:Name="TxtStatus" />
+                <TextBlock x:Name="TxtPedido" />
+                <TextBlock x:Name="TxtProximo" />
+
+                <TextBlock Text="CAMPOS OBJETIVOS" Style="{StaticResource Rotulo}" />
+                <TextBlock x:Name="TxtCampos" FontFamily="Consolas" />
+
+                <TextBlock Text="DIÁLOGO" Style="{StaticResource Rotulo}" />
+                <TextBox x:Name="TxtDialogo" IsReadOnly="True" TextWrapping="Wrap"
+                         Height="220" VerticalScrollBarVisibility="Auto"
+                         Background="{StaticResource Painel}" Foreground="{StaticResource Texto}"
+                         BorderBrush="#334155" FontFamily="Consolas" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <DockPanel Grid.Row="2" Margin="0,12,0,0">
+            <CheckBox x:Name="ChkMascarar" Content="Mascarar PII" IsChecked="True"
+                      Foreground="{StaticResource TextoFraco}" VerticalAlignment="Center" Margin="0,0,16,0" />
+            <Button Content="Exportar TXT" Click="ExportarTxt_Click" />
+            <Button Content="Exportar JSON" Click="ExportarJson_Click" />
+            <Button Content="Exportar CSV" Click="ExportarCsv_Click" />
+            <Button Content="Fechar" Click="Fechar_Click" DockPanel.Dock="Right" HorizontalAlignment="Right" Margin="0" />
+        </DockPanel>
+    </Grid>
+</Window>
