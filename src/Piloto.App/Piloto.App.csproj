@@ -6,6 +6,10 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>Piloto.App</RootNamespace>
     <AssemblyName>Piloto</AssemblyName>
+    <!-- LLamaSharp.Backend.Cpu traz llama/ggml em variantes avx/avx2/avx512/noavx;
+         o publish self-contained colide os nomes (NETSDK1152). O LLamaSharp carrega
+         a variante correta das subpastas runtimes/.../native/avxN/ em runtime. -->
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
   <!-- O SDK de WPF não inclui System.IO nos usings implícitos; adiciona globalmente. -->
