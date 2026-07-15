@@ -8,8 +8,9 @@ artifacts/
 # Installer output
 installer/Output/
 
-# Modelos (baixados, não versionados)
-models/
+# Modelos de IA (baixados, não versionados) — apenas a pasta na RAIZ do repo.
+# Ancorado com "/" para NÃO ignorar src/Piloto.Core/Models/ (Git no Windows ignora caixa).
+/models/
 *.gguf
 *.bin
 

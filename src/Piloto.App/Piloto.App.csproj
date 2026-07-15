@@ -6,7 +6,6 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>Piloto.App</RootNamespace>
     <AssemblyName>Piloto</AssemblyName>
-    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <ItemGroup>
