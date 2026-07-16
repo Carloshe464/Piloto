@@ -129,7 +129,7 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
         if (!string.IsNullOrWhiteSpace(glossario))
             builder = builder.WithPrompt(glossario);   // initial_prompt
         if (usarBeam)
-            builder = builder.WithBeamSearchSamplingStrategy().WithBeamSize(5).ParentBuilder;
+            builder = builder.WithBeamSearchSamplingStrategy().ParentBuilder; // beam padrão da lib (5)
 
         using var processor = builder.Build();
         await using var stream = File.OpenRead(caminhoWav);
