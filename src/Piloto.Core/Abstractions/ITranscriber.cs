@@ -11,8 +11,9 @@ public interface ITranscriber
     Task<Transcript> TranscreverAsync(AudioCapture captura, CancellationToken ct = default);
 
     /// <summary>
-    /// Libera o modelo da memória (recarregado na próxima transcrição). O pipeline chama
-    /// antes de carregar o LLM: em máquinas com pouca RAM, essa folga decide se o resumo roda.
+    /// Libera o modelo da memória (recarregado na próxima transcrição). Devolve true se
+    /// havia algo carregado. O pipeline chama antes de carregar o LLM (em máquinas com
+    /// pouca RAM essa folga decide se o resumo roda) e a fila chama após ociosidade.
     /// </summary>
-    void LiberarModelo() { }
+    bool LiberarModelo() => false;
 }

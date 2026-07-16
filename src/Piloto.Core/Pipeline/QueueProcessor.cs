@@ -21,7 +21,16 @@ public sealed class QueueProcessor : IAsyncDisposable
     private Task? _loop;
 
     private static readonly TimeSpan IntervaloOcioso = TimeSpan.FromSeconds(3);
+
+    // Após este tempo sem itens, os modelos são devolvidos ao SO (~2,4 GB do 4B): o
+    // atendente não paga o aluguel de RAM o dia inteiro por algo que trabalha minutos.
+    // Em sequência de ligações o cache continua valendo — só descarrega na calmaria.
+    private static readonly TimeSpan DescargaAposOciosidade = TimeSpan.FromMinutes(5);
+
     private const int MaxTentativas = 3;
+
+    private DateTimeOffset _ultimaAtividade = DateTimeOffset.Now;
+    private bool _modelosDescarregados;
 
     public event EventHandler<CallRecord>? RegistroProcessado;
     public event EventHandler? FilaMudou;
@@ -78,6 +87,7 @@ public sealed class QueueProcessor : IAsyncDisposable
                 var item = _repo.ProximoPendente();
                 if (item is null)
                 {
+                    DescarregarSeOcioso();
                     await EsperarAsync(ct).ConfigureAwait(false);
                     continue;
                 }
@@ -127,6 +137,29 @@ public sealed class QueueProcessor : IAsyncDisposable
             _log.LogError(ex, "Falha ao processar item {Id} (tentativa {N})", item.Id, item.Tentativas);
             FilaMudou?.Invoke(this, EventArgs.Empty);
         }
+        finally
+        {
+            _ultimaAtividade = DateTimeOffset.Now;
+            _modelosDescarregados = false;
+            // Evidência para calibrar consumo em produção (memória de pico vs. de posse).
+            _log.LogInformation("Memória do processo após o item {Id}: {Mb} MB",
+                item.Id, Environment.WorkingSet / 1_048_576);
+        }
+    }
+
+    private void DescarregarSeOcioso()
+    {
+        if (_modelosDescarregados) return;
+        if (DateTimeOffset.Now - _ultimaAtividade < DescargaAposOciosidade) return;
+
+        _modelosDescarregados = true;
+        try
+        {
+            if (_pipeline.LiberarModelos())
+                _log.LogInformation("Fila ociosa há {Min} min: modelos descarregados (memória do processo: {Mb} MB)",
+                    (int)DescargaAposOciosidade.TotalMinutes, Environment.WorkingSet / 1_048_576);
+        }
+        catch (Exception ex) { _log.LogError(ex, "Falha ao descarregar modelos ociosos"); }
     }
 
     private static AudioCapture ReconstruirCaptura(QueueItem item)

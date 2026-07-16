@@ -40,6 +40,18 @@ public sealed class TranscriptionPipeline
         _log = log;
     }
 
+    /// <summary>
+    /// Descarrega Whisper e LLM da memória (recarregados na próxima ligação). Devolve true
+    /// se algo estava carregado. Chamado pela fila após ociosidade: o Piloto usa memória de
+    /// pico durante o processamento, não de posse permanente.
+    /// </summary>
+    public bool LiberarModelos()
+    {
+        var whisper = _transcriber.LiberarModelo();
+        var llm = _llm.LiberarModelo();
+        return whisper || llm;
+    }
+
     public async Task<CallRecord> ProcessarAsync(AudioCapture captura, CancellationToken ct = default)
     {
         var listas = _listasProvider();

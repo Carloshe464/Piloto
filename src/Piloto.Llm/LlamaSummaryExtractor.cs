@@ -256,6 +256,20 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
+    public bool LiberarModelo()
+    {
+        lock (_lock)
+        {
+            if (_weights is null) return false;
+            _weights.Dispose();
+            _weights = null;
+            _parameters = null;
+            _caminhoCarregado = null;
+            _log.LogInformation("Modelo LLM liberado da memória");
+            return true;
+        }
+    }
+
     public void Dispose()
     {
         lock (_lock)

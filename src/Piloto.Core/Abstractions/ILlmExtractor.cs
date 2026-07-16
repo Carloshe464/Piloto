@@ -10,4 +10,11 @@ namespace Piloto.Core.Abstractions;
 public interface ILlmExtractor
 {
     Task<LlmSummary> ResumirAsync(Transcript transcript, ListasFechadas listas, CancellationToken ct = default);
+
+    /// <summary>
+    /// Libera os pesos da memória (recarregados na próxima chamada). Devolve true se havia
+    /// algo carregado. Chamado pela fila após ociosidade — os ~2,4 GB do modelo não ficam
+    /// residentes o dia inteiro na máquina do atendente.
+    /// </summary>
+    bool LiberarModelo() => false;
 }
