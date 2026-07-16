@@ -57,6 +57,10 @@ public sealed class TranscriptionPipeline
         string? erroLlm = null;
         if (_settings.Llm.Habilitado && _modelos.LlmDisponivel)
         {
+            // Whisper e LLM nunca precisam coexistir na memória: libera o primeiro antes
+            // de carregar o segundo. Custo: recarregar o Whisper na próxima ligação.
+            _transcriber.LiberarModelo();
+
             _log.LogInformation("Resumindo com LLM local (camada 2)");
             try
             {

@@ -102,6 +102,18 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
         return resultado;
     }
 
+    public void LiberarModelo()
+    {
+        lock (_lock)
+        {
+            if (_factory is null) return;
+            _factory.Dispose();
+            _factory = null;
+            _caminhoCarregado = null;
+            _log.LogInformation("Modelo Whisper liberado da memória");
+        }
+    }
+
     private WhisperFactory ObterFactory(string caminhoModelo)
     {
         lock (_lock)

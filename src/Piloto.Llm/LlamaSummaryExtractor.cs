@@ -135,15 +135,15 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
     /// </summary>
     private void GarantirMemoriaParaCarga(string caminho)
     {
-        // Além dos pesos (mmap, mas viram working set ao inferir), o llama.cpp aloca
-        // KV cache + buffers de computação; ~1,5 GB cobre contexto 4096 no Gemma 3 4B.
-        const long MargemBytes = 1_500_000_000;
-
         if (!TentarObterMemoria(out var fisica, out var commit))
             return; // sem leitura confiável, não bloqueia a carga
 
+        // Além dos pesos (mmap, mas viram working set ao inferir), o llama.cpp aloca
+        // KV cache + buffers de computação, que crescem com o modelo. Margem proporcional:
+        // não afrouxa a proteção do 4B e ainda deixa o Gemma 1B caber em máquinas de 4 GB.
         var modelo = new FileInfo(caminho).Length;
-        var necessario = modelo + MargemBytes;
+        var margem = Math.Max(384L * 1024 * 1024, modelo / 3);
+        var necessario = modelo + margem;
 
         // Sempre logado: se a carga morrer mesmo assim, estes números são a evidência.
         _log.LogInformation(

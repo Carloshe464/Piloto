@@ -12,6 +12,10 @@ param(
     [string]$Destino = (Join-Path $env:LOCALAPPDATA 'Piloto\models'),
     [ValidateSet('small', 'base')]
     [string]$Whisper = 'small',
+    # 4b: qualidade padrão (~2,4 GB; exige ~8 GB de RAM). 1b: máquinas com 4 GB (~0,8 GB).
+    # Ao usar 1b, ajuste "llm.modelo" no config para gemma-3-1b-it-Q4_K_M.gguf.
+    [ValidateSet('4b', '1b')]
+    [string]$Llm = '4b',
     [switch]$SemLlm
 )
 
@@ -32,9 +36,15 @@ $modelos = @{
     }
 }
 
-$llm = @{
-    Nome = 'gemma-3-4b-it-Q4_K_M.gguf'
-    Url  = 'https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf'
+$llms = @{
+    '4b' = @{
+        Nome = 'gemma-3-4b-it-Q4_K_M.gguf'
+        Url  = 'https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf'
+    }
+    '1b' = @{
+        Nome = 'gemma-3-1b-it-Q4_K_M.gguf'
+        Url  = 'https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf'
+    }
 }
 
 if (-not (Test-Path $Destino)) {
@@ -80,7 +90,8 @@ $w = $modelos[$Whisper]
 Get-Modelo $w.Nome $w.Url
 
 if (-not $SemLlm) {
-    Get-Modelo $llm.Nome $llm.Url
+    $l = $llms[$Llm]
+    Get-Modelo $l.Nome $l.Url
 }
 else {
     Write-Passo 'LLM ignorado (-SemLlm).'
