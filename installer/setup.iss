@@ -2,9 +2,11 @@
 ; Gera installer\Output\PilotoSetup-<versao>.exe. Rode via scripts\build-installer.ps1 ou no CI.
 
 #define MyAppName "Piloto"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "Piloto"
 #define MyAppExeName "Piloto.exe"
+; Mesmo nome criado por App.xaml.cs — é como o setup detecta o app em execução.
+#define MyAppMutex "PilotoAppMutex"
 
 [Setup]
 AppId={{9C2B4E7A-1F3D-4B8E-9A6C-0C1D2E3F4A5B}}
@@ -23,6 +25,10 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExeName}
+; Atualização in-place: mesmo AppId instala por cima, preservando os dados do usuário
+; (%LOCALAPPDATA%\Piloto). O AppMutex é a rede de segurança caso o app reabra depois
+; do fechamento automático feito em [Code].
+AppMutex={#MyAppMutex}
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
@@ -66,3 +72,38 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
   Flags: nowait postinstall skipifsilent
 Filename: "{app}\{#MyAppExeName}"; Description: "Executar o {#MyAppName} agora"; \
   Flags: nowait postinstall skipifsilent
+
+[Code]
+{ Fecha o Piloto automaticamente antes de atualizar/desinstalar, com confirmação.
+  Sem isso, o app na bandeja (que só se esconde ao fechar a janela) travaria os
+  arquivos e a atualização falharia com "arquivo em uso". }
+function FecharPilotoSeNecessario(): Boolean;
+var
+  Codigo: Integer;
+begin
+  Result := True;
+  if not CheckForMutexes('{#MyAppMutex}') then
+    Exit;
+
+  if MsgBox('O {#MyAppName} está em execução e será fechado para continuar.' + #13#10 +
+            'Se houver uma gravação em andamento, ela será perdida. Continuar?',
+            mbConfirmation, MB_YESNO) = IDNO then
+  begin
+    Result := False;
+    Exit;
+  end;
+
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#MyAppExeName} /F', '',
+       SW_HIDE, ewWaitUntilTerminated, Codigo);
+  Sleep(800);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := FecharPilotoSeNecessario();
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := FecharPilotoSeNecessario();
+end;
