@@ -114,15 +114,23 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
         }
     }
 
-    public int RecuperarItensOrfaos()
+    public int RecuperarItensOrfaos(int maxTentativas)
     {
         lock (_lock)
         {
             using var cmd = Conn.CreateCommand();
+            // A queda conta como tentativa: no CASE, "tentativas" ainda é o valor antigo.
             cmd.CommandText = """
-                UPDATE queue SET estado=$pendente, atualizado_em=$agora
-                WHERE estado=$processando;
+                UPDATE queue SET
+                    tentativas = tentativas + 1,
+                    ultimo_erro = $motivo,
+                    estado = CASE WHEN tentativas + 1 >= $max THEN $erro ELSE $pendente END,
+                    atualizado_em = $agora
+                WHERE estado = $processando;
                 """;
+            cmd.Parameters.AddWithValue("$motivo", "Processo encerrado inesperadamente durante o processamento");
+            cmd.Parameters.AddWithValue("$max", maxTentativas);
+            cmd.Parameters.AddWithValue("$erro", (int)QueueState.Erro);
             cmd.Parameters.AddWithValue("$pendente", (int)QueueState.Pendente);
             cmd.Parameters.AddWithValue("$agora", Iso(DateTimeOffset.Now));
             cmd.Parameters.AddWithValue("$processando", (int)QueueState.Processando);

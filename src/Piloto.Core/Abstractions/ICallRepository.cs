@@ -14,10 +14,13 @@ public interface ICallRepository
     int ContarPendentes();
 
     /// <summary>
-    /// Devolve ao estado Pendente itens presos em Processando por um encerramento abrupto
-    /// (crash/queda de energia). Chamar na inicialização, antes de consumir a fila.
+    /// Recupera itens presos em Processando por um encerramento abrupto (crash/queda de
+    /// energia). Cada queda conta como tentativa; ao atingir <paramref name="maxTentativas"/>
+    /// o item vai para Erro em vez de Pendente — senão um item que derruba o processo
+    /// (ex.: crash nativo) entraria em loop infinito de crash a cada inicialização.
+    /// Chamar na inicialização, antes de consumir a fila.
     /// </summary>
-    int RecuperarItensOrfaos();
+    int RecuperarItensOrfaos(int maxTentativas);
 
     // ----- Registros -----
     long SalvarRegistro(CallRecord registro);

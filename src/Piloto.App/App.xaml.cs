@@ -150,6 +150,8 @@ public partial class App : Application
     {
         try
         {
+            // Marca encerramento limpo: sem esta linha no log, o processo morreu (crash).
+            _log?.LogInformation("Piloto encerrado normalmente");
             _tray?.Dispose();
             _provider?.DisposeAsync().AsTask().GetAwaiter().GetResult();
             _mutex?.Dispose();

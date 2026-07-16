@@ -1,6 +1,8 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using LLama;
 using LLama.Common;
+using LLama.Native;
 using LLama.Sampling;
 using Microsoft.Extensions.Logging;
 using Piloto.Core.Abstractions;
@@ -86,6 +88,8 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
                 return (_weights, _parameters);
 
             _weights?.Dispose();
+            ConfigurarLogNativo();
+            GarantirMemoriaParaCarga(caminho);
             _log.LogInformation("Carregando modelo LLM: {Modelo}", Path.GetFileName(caminho));
 
             var parameters = new ModelParams(caminho)
@@ -102,6 +106,96 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
             return (weights, parameters);
         }
     }
+
+    private static bool _logNativoConfigurado;
+
+    /// <summary>
+    /// Roteia o log interno do llama.cpp para o log do app. Em crash nativo durante a carga
+    /// (que não gera stack .NET), a última linha nativa no arquivo aponta onde a carga morreu.
+    /// </summary>
+    private void ConfigurarLogNativo()
+    {
+        if (_logNativoConfigurado) return;
+        try
+        {
+            NativeLogConfig.llama_log_set(_log);
+            _logNativoConfigurado = true;
+        }
+        catch (Exception ex)
+        {
+            _logNativoConfigurado = true; // não retenta a cada carga
+            _log.LogWarning(ex, "Não foi possível rotear o log nativo do llama.cpp");
+        }
+    }
+
+    /// <summary>
+    /// Falta de memória durante a carga do modelo derruba o processo inteiro (abort/access
+    /// violation dentro do llama.cpp — nenhum try/catch .NET alcança). Checar antes converte
+    /// o crash em exceção gerenciada, que o pipeline trata como "registro sem resumo".
+    /// </summary>
+    private void GarantirMemoriaParaCarga(string caminho)
+    {
+        // Além dos pesos (mmap, mas viram working set ao inferir), o llama.cpp aloca
+        // KV cache + buffers de computação; ~1,5 GB cobre contexto 4096 no Gemma 3 4B.
+        const long MargemBytes = 1_500_000_000;
+
+        if (!TentarObterMemoria(out var fisica, out var commit))
+            return; // sem leitura confiável, não bloqueia a carga
+
+        var modelo = new FileInfo(caminho).Length;
+        var necessario = modelo + MargemBytes;
+
+        // Sempre logado: se a carga morrer mesmo assim, estes números são a evidência.
+        _log.LogInformation(
+            "Memória antes da carga do LLM: {FisicaMb} MB físicos livres, {CommitMb} MB de commit livres, modelo {ModeloMb} MB",
+            fisica / 1_048_576, commit / 1_048_576, modelo / 1_048_576);
+
+        // O commit (RAM + pagefile) também limita: com pagefile pequeno/desativado, o malloc
+        // do llama.cpp falha e aborta o processo mesmo havendo RAM física livre.
+        var limitante = Math.Min(fisica, commit);
+        if (limitante >= necessario)
+            return;
+
+        _log.LogWarning(
+            "Memória insuficiente para o LLM: {DisponivelMb} MB utilizáveis, necessários ~{NecessarioMb} MB — camada 2 pulada",
+            limitante / 1_048_576, necessario / 1_048_576);
+        throw new InvalidOperationException(
+            $"Memória insuficiente para carregar o modelo LLM " +
+            $"({limitante / 1_048_576} MB utilizáveis, necessários ~{necessario / 1_048_576} MB).");
+    }
+
+    private static bool TentarObterMemoria(out long fisicaBytes, out long commitBytes)
+    {
+        fisicaBytes = 0;
+        commitBytes = 0;
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return false;
+
+        var status = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
+        if (!GlobalMemoryStatusEx(ref status))
+            return false;
+
+        fisicaBytes = (long)status.ullAvailPhys;
+        commitBytes = (long)status.ullAvailPageFile;
+        return true;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MEMORYSTATUSEX
+    {
+        public uint dwLength;
+        public uint dwMemoryLoad;
+        public ulong ullTotalPhys;
+        public ulong ullAvailPhys;
+        public ulong ullTotalPageFile;
+        public ulong ullAvailPageFile;
+        public ulong ullTotalVirtual;
+        public ulong ullAvailVirtual;
+        public ulong ullAvailExtendedVirtual;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
     public void Dispose()
     {

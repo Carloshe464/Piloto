@@ -44,9 +44,10 @@ public sealed class QueueProcessor : IAsyncDisposable
         // sem isso, nunca mais seriam tentados — ProximoPendente só busca Pendente.
         try
         {
-            var orfaos = _repo.RecuperarItensOrfaos();
+            var orfaos = _repo.RecuperarItensOrfaos(MaxTentativas);
             if (orfaos > 0)
-                _log.LogWarning("Fila: {N} item(ns) órfão(s) de execução anterior devolvido(s) à fila", orfaos);
+                _log.LogWarning("Fila: {N} item(ns) órfão(s) de queda anterior recuperado(s) — após {Max} quedas o item vai para Erro",
+                    orfaos, MaxTentativas);
         }
         catch (Exception ex) { _log.LogError(ex, "Falha ao recuperar itens órfãos da fila"); }
 

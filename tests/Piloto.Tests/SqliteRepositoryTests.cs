@@ -100,17 +100,44 @@ public class SqliteRepositoryTests : IDisposable
         _repo.AtualizarItem(item);
         Assert.Null(_repo.ProximoPendente());
 
-        var recuperados = _repo.RecuperarItensOrfaos();
+        var recuperados = _repo.RecuperarItensOrfaos(3);
         Assert.Equal(1, recuperados);
 
         var pendente = _repo.ProximoPendente();
         Assert.NotNull(pendente);
         Assert.Equal(item.Id, pendente!.Id);
+        Assert.Equal(1, pendente.Tentativas); // a queda conta como tentativa
 
         // Itens concluídos não são tocados.
         pendente.Estado = QueueState.Concluido;
         _repo.AtualizarItem(pendente);
-        Assert.Equal(0, _repo.RecuperarItensOrfaos());
+        Assert.Equal(0, _repo.RecuperarItensOrfaos(3));
+    }
+
+    [Fact]
+    public void ItemQueDerrubaOProcessoVaiParaErroAposMaxQuedas()
+    {
+        var item = new QueueItem
+        {
+            CaminhoAudioAtendente = "a.wav",
+            CaminhoAudioCliente = "c.wav",
+        };
+        _repo.EnfileirarItem(item);
+
+        // Um item cujo processamento derruba o processo (crash nativo) cai em
+        // Processando a cada boot; sem limite, seria um loop infinito de crash.
+        for (var queda = 1; queda <= 3; queda++)
+        {
+            var preso = queda == 1 ? item : _repo.ProximoPendente();
+            Assert.NotNull(preso);
+            preso!.Estado = QueueState.Processando;
+            _repo.AtualizarItem(preso);
+
+            Assert.Equal(1, _repo.RecuperarItensOrfaos(3));
+        }
+
+        // Após a 3ª queda o item fica em Erro e não volta mais para a fila.
+        Assert.Null(_repo.ProximoPendente());
     }
 
     [Fact]
