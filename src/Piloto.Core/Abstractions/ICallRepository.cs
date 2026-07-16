@@ -13,6 +13,12 @@ public interface ICallRepository
     void AtualizarItem(QueueItem item);
     int ContarPendentes();
 
+    /// <summary>
+    /// Devolve ao estado Pendente itens presos em Processando por um encerramento abrupto
+    /// (crash/queda de energia). Chamar na inicialização, antes de consumir a fila.
+    /// </summary>
+    int RecuperarItensOrfaos();
+
     // ----- Registros -----
     long SalvarRegistro(CallRecord registro);
     CallRecord? ObterRegistro(long id);

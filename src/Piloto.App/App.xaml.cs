@@ -11,15 +11,34 @@ namespace Piloto.App;
 
 public partial class App : Application
 {
+    /// <summary>Nome do mutex de instância única — o instalador (setup.iss) usa o mesmo
+    /// nome em CheckForMutexes para detectar o app em execução antes de atualizar.</summary>
+    private const string NomeMutex = "PilotoAppMutex";
+
     private ServiceProvider? _provider;
     private ConfigService? _config;
     private TrayIconController? _tray;
     private MainWindow? _main;
     private ILogger<App>? _log;
+    private Mutex? _mutex;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        _mutex = new Mutex(initiallyOwned: false, NomeMutex, out var primeiraInstancia);
+        if (!primeiraInstancia)
+        {
+            // Duas instâncias consumiriam a mesma fila SQLite em paralelo (itens duplicados)
+            // e a segunda falharia na porta do bridge. Bandeja + autostart tornam isso comum.
+            MessageBox.Show("O Piloto já está em execução — procure o ícone na bandeja, ao lado do relógio.",
+                "Piloto", MessageBoxButton.OK, MessageBoxImage.Information);
+            _mutex.Dispose();
+            _mutex = null;
+            Shutdown(0);
+            return;
+        }
+
         DispatcherUnhandledException += OnUnhandled;
 
         try
@@ -133,6 +152,7 @@ public partial class App : Application
         {
             _tray?.Dispose();
             _provider?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            _mutex?.Dispose();
         }
         catch { /* ignore */ }
         base.OnExit(e);

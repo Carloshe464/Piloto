@@ -114,6 +114,22 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
         }
     }
 
+    public int RecuperarItensOrfaos()
+    {
+        lock (_lock)
+        {
+            using var cmd = Conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE queue SET estado=$pendente, atualizado_em=$agora
+                WHERE estado=$processando;
+                """;
+            cmd.Parameters.AddWithValue("$pendente", (int)QueueState.Pendente);
+            cmd.Parameters.AddWithValue("$agora", Iso(DateTimeOffset.Now));
+            cmd.Parameters.AddWithValue("$processando", (int)QueueState.Processando);
+            return cmd.ExecuteNonQuery();
+        }
+    }
+
     // ---------------------------------------------------------------- Registros
 
     public long SalvarRegistro(CallRecord r)

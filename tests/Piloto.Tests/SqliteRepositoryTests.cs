@@ -86,6 +86,34 @@ public class SqliteRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void RecuperaItensOrfaosDeExecucaoAnterior()
+    {
+        var item = new QueueItem
+        {
+            CaminhoAudioAtendente = "a.wav",
+            CaminhoAudioCliente = "c.wav",
+        };
+        _repo.EnfileirarItem(item);
+
+        // Simula crash no meio do processamento: item fica preso em Processando.
+        item.Estado = QueueState.Processando;
+        _repo.AtualizarItem(item);
+        Assert.Null(_repo.ProximoPendente());
+
+        var recuperados = _repo.RecuperarItensOrfaos();
+        Assert.Equal(1, recuperados);
+
+        var pendente = _repo.ProximoPendente();
+        Assert.NotNull(pendente);
+        Assert.Equal(item.Id, pendente!.Id);
+
+        // Itens concluídos não são tocados.
+        pendente.Estado = QueueState.Concluido;
+        _repo.AtualizarItem(pendente);
+        Assert.Equal(0, _repo.RecuperarItensOrfaos());
+    }
+
+    [Fact]
     public void RetencaoRecenteNaoRemoveNada()
     {
         _repo.SalvarRegistro(Registro("recente"));

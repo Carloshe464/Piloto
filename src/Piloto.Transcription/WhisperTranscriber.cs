@@ -57,9 +57,21 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
         WhisperFactory factory, string caminhoWav, Speaker speaker, string? glossario, CancellationToken ct)
     {
         var resultado = new List<TranscriptSegment>();
-        if (!File.Exists(caminhoWav))
+        var info = new FileInfo(caminhoWav);
+        if (!info.Exists)
         {
             _log.LogWarning("Canal {Speaker}: arquivo ausente {Caminho}", speaker, caminhoWav);
+            return resultado;
+        }
+
+        // O whisper.cpp exige ao menos ~1 s de áudio; um canal silencioso (loopback sem
+        // nada tocando) gera WAV só com cabeçalho e derruba a biblioteca nativa inteira
+        // (access violation, sem exceção .NET). PCM 16-bit mono: TaxaHz*2 bytes por segundo.
+        var bytesMinimos = 44 + _settings.Audio.TaxaHz * 2;
+        if (info.Length < bytesMinimos)
+        {
+            _log.LogWarning("Canal {Speaker}: áudio vazio ou curto demais ({Bytes} bytes) — canal ignorado",
+                speaker, info.Length);
             return resultado;
         }
 

@@ -39,6 +39,17 @@ public sealed class QueueProcessor : IAsyncDisposable
     public void Iniciar()
     {
         if (EmExecucao) return;
+
+        // Itens presos em Processando são órfãos de um encerramento abrupto (crash);
+        // sem isso, nunca mais seriam tentados — ProximoPendente só busca Pendente.
+        try
+        {
+            var orfaos = _repo.RecuperarItensOrfaos();
+            if (orfaos > 0)
+                _log.LogWarning("Fila: {N} item(ns) órfão(s) de execução anterior devolvido(s) à fila", orfaos);
+        }
+        catch (Exception ex) { _log.LogError(ex, "Falha ao recuperar itens órfãos da fila"); }
+
         _cts = new CancellationTokenSource();
         _loop = Task.Factory.StartNew(
             () => LoopAsync(_cts.Token),
