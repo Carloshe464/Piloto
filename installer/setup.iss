@@ -54,5 +54,15 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
   Flags: uninsdeletevalue; Tasks: startupicon
 
 [Run]
+; Entradas postinstall viram checkboxes na última tela do assistente e rodam como o
+; usuário original (não elevado) — os modelos caem no %LOCALAPPDATA% do usuário certo.
+; Os modelos (~2,6 GB) não são embutidos no setup: o GitHub Releases limita artefatos
+; a 2 GB e cada atualização reenviaria tudo; em máquinas sem internet, use o atalho
+; "Baixar modelos" do menu Iniciar em outra máquina e copie a pasta manualmente.
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
+  Parameters: "-NoExit -ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\download-models.ps1"""; \
+  WorkingDir: "{app}\scripts"; \
+  Description: "Baixar os modelos de IA agora (~2,6 GB — requer internet)"; \
+  Flags: nowait postinstall skipifsilent
 Filename: "{app}\{#MyAppExeName}"; Description: "Executar o {#MyAppName} agora"; \
   Flags: nowait postinstall skipifsilent
