@@ -12,7 +12,7 @@ public sealed class ModelCatalog : IModelCatalog
 
     public bool WhisperDisponivel => File.Exists(_settings.CaminhoModeloWhisper);
 
-    public bool LlmDisponivel => File.Exists(_settings.CaminhoModeloLlm);
+    public bool LlmDisponivel => CandidatosLlm.Count > 0;
 
     /// <summary>
     /// O pipeline pode rodar se o Whisper existe. O LLM é opcional: quando desligado no
@@ -23,7 +23,27 @@ public sealed class ModelCatalog : IModelCatalog
 
     public string? CaminhoWhisper => WhisperDisponivel ? _settings.CaminhoModeloWhisper : null;
 
-    public string? CaminhoLlm => LlmDisponivel ? _settings.CaminhoModeloLlm : null;
+    public string? CaminhoLlm => CandidatosLlm.FirstOrDefault();
+
+    public IReadOnlyList<string> CandidatosLlm
+    {
+        get
+        {
+            var configurado = _settings.CaminhoModeloLlm;
+            var lista = new List<string>();
+            if (File.Exists(configurado))
+                lista.Add(configurado);
+
+            var pasta = Path.GetDirectoryName(configurado);
+            if (!string.IsNullOrEmpty(pasta) && Directory.Exists(pasta))
+            {
+                lista.AddRange(Directory.EnumerateFiles(pasta, "*.gguf")
+                    .Where(f => !string.Equals(f, configurado, StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(f => new FileInfo(f).Length));
+            }
+            return lista;
+        }
+    }
 
     public IReadOnlyList<string> ModelosAusentes()
     {

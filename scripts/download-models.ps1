@@ -12,10 +12,11 @@ param(
     [string]$Destino = (Join-Path $env:LOCALAPPDATA 'Piloto\models'),
     [ValidateSet('small', 'base')]
     [string]$Whisper = 'small',
+    # auto: decide pela RAM da máquina (>= 7 GB -> 4b; menos -> 1b). O app usa o que couber
+    # na memória em runtime, então não é preciso ajustar o config ao baixar o 1b.
     # 4b: qualidade padrão (~2,4 GB; exige ~8 GB de RAM). 1b: máquinas com 4 GB (~0,8 GB).
-    # Ao usar 1b, ajuste "llm.modelo" no config para gemma-3-1b-it-Q4_K_M.gguf.
-    [ValidateSet('4b', '1b')]
-    [string]$Llm = '4b',
+    [ValidateSet('auto', '4b', '1b')]
+    [string]$Llm = 'auto',
     [switch]$SemLlm
 )
 
@@ -90,6 +91,11 @@ $w = $modelos[$Whisper]
 Get-Modelo $w.Nome $w.Url
 
 if (-not $SemLlm) {
+    if ($Llm -eq 'auto') {
+        $ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
+        $Llm = if ($ramGb -ge 7) { '4b' } else { '1b' }
+        Write-Passo "RAM total: $ramGb GB -> LLM $Llm"
+    }
     $l = $llms[$Llm]
     Get-Modelo $l.Nome $l.Url
 }

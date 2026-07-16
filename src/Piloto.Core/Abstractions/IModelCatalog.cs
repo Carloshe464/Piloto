@@ -15,5 +15,12 @@ public interface IModelCatalog
     string? CaminhoWhisper { get; }
     string? CaminhoLlm { get; }
 
+    /// <summary>
+    /// Candidatos a modelo LLM: o configurado primeiro; depois os demais .gguf da pasta
+    /// de modelos, do maior para o menor. Quem decide qual cabe na RAM é o extractor —
+    /// assim o mesmo instalador serve máquinas de 4 GB (Gemma 1B) e de 16 GB (Gemma 4B).
+    /// </summary>
+    IReadOnlyList<string> CandidatosLlm { get; }
+
     IReadOnlyList<string> ModelosAusentes();
 }

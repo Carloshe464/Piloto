@@ -12,10 +12,11 @@ using Piloto.Core.Models;
 namespace Piloto.Llm;
 
 /// <summary>
-/// Camada 2 — resumo com LLM local (Gemma 3 4B Q4 via LLamaSharp/llama.cpp).
-/// Saída JSON determinística (temperatura 0), execução em CPU. A restrição às listas
-/// fechadas é garantida pelo grounding; a gramática GBNF (GbnfGrammarBuilder) está pronta,
-/// porém desligada por padrão. Os pesos ficam em cache enquanto o caminho não muda.
+/// Camada 2 — resumo com LLM local (Gemma 3 via LLamaSharp/llama.cpp).
+/// Saída JSON determinística (temperatura 0) e forçada por gramática GBNF
+/// (GbnfGrammarBuilder): o modelo escolhe valores das listas fechadas em vez de redigir.
+/// O modelo é escolhido entre os candidatos do catálogo pelo que cabe na RAM da máquina
+/// (4B onde há memória, 1B onde não há). Os pesos ficam em cache enquanto o caminho não muda.
 /// </summary>
 public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
 {
@@ -46,21 +47,19 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
         if (transcript.EstaVazio)
             return LlmSummary.Vazio();
 
-        var caminho = _modelos.CaminhoLlm
-            ?? throw new InvalidOperationException("Modelo LLM ausente.");
-
+        var caminho = EscolherModelo();
         var (weights, parameters) = ObterWeights(caminho);
         var executor = new StatelessExecutor(weights, parameters);
 
         var prompt = _prompt.Construir(transcript, listas);
 
-        // Saída determinística (temperatura 0). A restrição às listas fechadas é garantida
-        // pelo grounding (camada 3), que anula qualquer valor fora da lista. Para forçar o
-        // JSON por gramática GBNF, gere-a com GbnfGrammarBuilder.Construir(listas) e atribua
-        // a DefaultSamplingPipeline.Grammar — confirme antes a API da versão do LLamaSharp.
-        var pipeline = new DefaultSamplingPipeline
+        // Saída determinística (temperatura 0) e restrita por gramática GBNF: o modelo só
+        // consegue emitir o JSON com as seis chaves, e motivo/produto/status saem das listas
+        // fechadas (ou null). O grounding (camada 3) continua como última barreira.
+        using var pipeline = new DefaultSamplingPipeline
         {
             Temperature = _settings.Llm.Temperatura,
+            Grammar = new Grammar(GbnfGrammarBuilder.Construir(listas), "root"),
         };
 
         var inference = new InferenceParams
@@ -74,10 +73,56 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
         await foreach (var token in executor.InferAsync(prompt, inference, ct).ConfigureAwait(false))
             sb.Append(token);
 
-        var resumo = LlmResponseParser.Parse(sb.ToString());
+        var bruto = sb.ToString();
+        if (LlmResponseParser.ExtrairJson(bruto) is null)
+        {
+            // Não deveria acontecer com a gramática ligada; se acontecer (saída vazia,
+            // truncada etc.), deixa evidência no log e marca o registro para revisão.
+            var trecho = bruto.Length > 300 ? bruto[..300] + "…" : bruto;
+            _log.LogWarning("LLM não devolveu JSON interpretável; início da saída: {Trecho}",
+                trecho.Length == 0 ? "(vazia)" : trecho);
+            throw new InvalidOperationException("O LLM não devolveu JSON interpretável.");
+        }
+
+        var resumo = LlmResponseParser.Parse(bruto);
         _log.LogInformation("LLM: motivo={Motivo} produto={Produto} status={Status}",
             resumo.MotivoContato ?? "—", resumo.Produto ?? "—", resumo.Status ?? "—");
         return resumo;
+    }
+
+    /// <summary>
+    /// Escolhe entre os candidatos do catálogo (configurado primeiro, depois por tamanho)
+    /// o primeiro que cabe na memória desta máquina. Se um candidato já está carregado,
+    /// permanece nele — trocar de modelo a cada chamada custaria uma recarga inteira.
+    /// </summary>
+    private string EscolherModelo()
+    {
+        var candidatos = _modelos.CandidatosLlm;
+        if (candidatos.Count == 0)
+            throw new InvalidOperationException("Modelo LLM ausente.");
+
+        lock (_lock)
+        {
+            if (_caminhoCarregado is not null && candidatos.Contains(_caminhoCarregado))
+                return _caminhoCarregado;
+        }
+
+        foreach (var candidato in candidatos)
+        {
+            if (!MemoriaComporta(candidato))
+            {
+                _log.LogInformation("Modelo {Modelo} não cabe na memória desta máquina; tentando o próximo",
+                    Path.GetFileName(candidato));
+                continue;
+            }
+            if (!string.Equals(candidato, candidatos[0], StringComparison.OrdinalIgnoreCase))
+                _log.LogWarning("Usando modelo alternativo {Modelo} (o preferido não cabe na RAM)",
+                    Path.GetFileName(candidato));
+            return candidato;
+        }
+
+        // Nenhum cabe: segue com o menor — GarantirMemoriaParaCarga lança com os números.
+        return candidatos[^1];
     }
 
     private (LLamaWeights, ModelParams) ObterWeights(string caminho)
@@ -138,17 +183,12 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
         if (!TentarObterMemoria(out var fisica, out var commit))
             return; // sem leitura confiável, não bloqueia a carga
 
-        // Além dos pesos (mmap, mas viram working set ao inferir), o llama.cpp aloca
-        // KV cache + buffers de computação, que crescem com o modelo. Margem proporcional:
-        // não afrouxa a proteção do 4B e ainda deixa o Gemma 1B caber em máquinas de 4 GB.
-        var modelo = new FileInfo(caminho).Length;
-        var margem = Math.Max(384L * 1024 * 1024, modelo / 3);
-        var necessario = modelo + margem;
+        var necessario = NecessarioParaCarga(caminho);
 
         // Sempre logado: se a carga morrer mesmo assim, estes números são a evidência.
         _log.LogInformation(
-            "Memória antes da carga do LLM: {FisicaMb} MB físicos livres, {CommitMb} MB de commit livres, modelo {ModeloMb} MB",
-            fisica / 1_048_576, commit / 1_048_576, modelo / 1_048_576);
+            "Memória antes da carga do LLM: {FisicaMb} MB físicos livres, {CommitMb} MB de commit livres, necessários ~{NecessarioMb} MB",
+            fisica / 1_048_576, commit / 1_048_576, necessario / 1_048_576);
 
         // O commit (RAM + pagefile) também limita: com pagefile pequeno/desativado, o malloc
         // do llama.cpp falha e aborta o processo mesmo havendo RAM física livre.
@@ -162,6 +202,25 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
         throw new InvalidOperationException(
             $"Memória insuficiente para carregar o modelo LLM " +
             $"({limitante / 1_048_576} MB utilizáveis, necessários ~{necessario / 1_048_576} MB).");
+    }
+
+    private bool MemoriaComporta(string caminho)
+    {
+        if (!TentarObterMemoria(out var fisica, out var commit))
+            return true; // sem leitura confiável, não bloqueia
+        return Math.Min(fisica, commit) >= NecessarioParaCarga(caminho);
+    }
+
+    /// <summary>
+    /// Além dos pesos (mmap, mas viram working set ao inferir), o llama.cpp aloca KV cache
+    /// + buffers de computação, que crescem com o modelo. Margem proporcional: não afrouxa
+    /// a proteção do 4B e ainda deixa o Gemma 1B caber em máquinas de 4 GB.
+    /// </summary>
+    private static long NecessarioParaCarga(string caminho)
+    {
+        var modelo = new FileInfo(caminho).Length;
+        var margem = Math.Max(384L * 1024 * 1024, modelo / 3);
+        return modelo + margem;
     }
 
     private static bool TentarObterMemoria(out long fisicaBytes, out long commitBytes)
