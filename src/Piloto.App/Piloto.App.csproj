@@ -6,10 +6,6 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>Piloto.App</RootNamespace>
     <AssemblyName>Piloto</AssemblyName>
-    <!-- LLamaSharp.Backend.Cpu traz llama/ggml em variantes avx/avx2/avx512/noavx;
-         o publish self-contained colide os nomes (NETSDK1152). O LLamaSharp carrega
-         a variante correta das subpastas runtimes/.../native/avxN/ em runtime. -->
-    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
   <!-- O SDK de WPF não inclui System.IO nos usings implícitos; adiciona globalmente. -->
@@ -20,8 +16,8 @@
   <ItemGroup>
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.8" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,5 +42,20 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+
+  <!-- O publish com RID achata os assets nativos do NuGet na raiz, o que colide as variantes
+       avx/avx2/avx512/noavx do LLamaSharp.Backend.Cpu (NETSDK1152) e remove as subpastas
+       runtimes\win-x64\native\<variante>\ que o loader do LLamaSharp procura em runtime.
+       Este target devolve cada DLL do backend ao seu caminho original dentro do publish. -->
+  <Target Name="PreservarNativosLLamaSharpNoPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <_LLamaNativoAchatado Include="@(ResolvedFileToPublish)"
+          Condition="'%(ResolvedFileToPublish.NuGetPackageId)' == 'LLamaSharp.Backend.Cpu'" />
+      <ResolvedFileToPublish Remove="@(_LLamaNativoAchatado)" />
+      <ResolvedFileToPublish Include="@(_LLamaNativoAchatado)">
+        <RelativePath>$([System.Text.RegularExpressions.Regex]::Replace('%(_LLamaNativoAchatado.Identity)', '^.*[\\/]runtimes[\\/]', 'runtimes/'))</RelativePath>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
 </Project>

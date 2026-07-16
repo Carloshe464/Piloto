@@ -50,11 +50,25 @@ public sealed class TranscriptionPipeline
         _log.LogInformation("Aplicando regras (camada 1)");
         var campos = _rules.Extrair(transcript);
 
+        // O LLM é a camada opcional: se falhar (modelo incompatível, corrompido, sem
+        // memória), o registro sai sem resumo e marcado para revisão — a transcrição
+        // e os campos objetivos, que já custaram a passada do Whisper, são preservados.
         LlmSummary resumo;
+        string? erroLlm = null;
         if (_settings.Llm.Habilitado && _modelos.LlmDisponivel)
         {
             _log.LogInformation("Resumindo com LLM local (camada 2)");
-            resumo = await _llm.ResumirAsync(transcript, listas, ct).ConfigureAwait(false);
+            try
+            {
+                resumo = await _llm.ResumirAsync(transcript, listas, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Falha no LLM — registro seguirá sem resumo interpretativo");
+                resumo = LlmSummary.Vazio();
+                erroLlm = ex.Message;
+            }
         }
         else
         {
@@ -74,6 +88,9 @@ public sealed class TranscriptionPipeline
             CaminhoAudioAtendente = captura.CaminhoAtendente,
             CaminhoAudioCliente = captura.CaminhoCliente,
         };
+
+        if (erroLlm is not null)
+            registro.MarcarRevisao($"Resumo automático indisponível — erro no LLM: {erroLlm}");
 
         _log.LogInformation("Grounding (camada 3)");
         _grounding.Aplicar(registro, listas);

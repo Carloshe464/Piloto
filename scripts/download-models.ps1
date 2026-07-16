@@ -49,7 +49,29 @@ function Get-Modelo($nome, $url) {
         return
     }
     Write-Passo "Baixando $nome ..."
-    Invoke-WebRequest -Uri $url -OutFile $alvo -UseBasicParsing
+
+    # Baixa em arquivo temporário e renomeia no fim: um download interrompido nunca
+    # deixa um modelo truncado com o nome final (que seria "pulado" na próxima execução).
+    $temp = "$alvo.baixando"
+    if (Test-Path $temp) { Remove-Item $temp -Force }
+
+    # Invoke-WebRequest no Windows PowerShell 5.1 carrega o arquivo INTEIRO em memória
+    # (estoura com modelos de GBs). curl.exe (nativo do Win10 1803+) faz streaming.
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+        & $curl.Source -L --fail --retry 3 --retry-delay 5 -o $temp $url
+        if ($LASTEXITCODE -ne 0) {
+            if (Test-Path $temp) { Remove-Item $temp -Force }
+            throw "Falha ao baixar $nome (curl saiu com código $LASTEXITCODE)."
+        }
+    }
+    else {
+        # Fallback: WebClient também faz streaming direto para o disco.
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        (New-Object Net.WebClient).DownloadFile($url, $temp)
+    }
+
+    Move-Item $temp $alvo -Force
     $mb = [math]::Round((Get-Item $alvo).Length / 1MB, 1)
     Write-Host "    OK ($mb MB)" -ForegroundColor Green
 }
