@@ -10,7 +10,7 @@ public sealed class ModelCatalog : IModelCatalog
 
     public ModelCatalog(AppSettings settings) => _settings = settings;
 
-    public bool WhisperDisponivel => File.Exists(_settings.CaminhoModeloWhisper);
+    public bool WhisperDisponivel => CandidatosWhisper.Count > 0;
 
     public bool LlmDisponivel => CandidatosLlm.Count > 0;
 
@@ -21,7 +21,27 @@ public sealed class ModelCatalog : IModelCatalog
     public bool PipelinePronto =>
         WhisperDisponivel && (!_settings.Llm.Habilitado || LlmDisponivel);
 
-    public string? CaminhoWhisper => WhisperDisponivel ? _settings.CaminhoModeloWhisper : null;
+    public string? CaminhoWhisper => CandidatosWhisper.FirstOrDefault();
+
+    public IReadOnlyList<string> CandidatosWhisper
+    {
+        get
+        {
+            var configurado = _settings.CaminhoModeloWhisper;
+            var lista = new List<string>();
+            if (File.Exists(configurado))
+                lista.Add(configurado);
+
+            var pasta = Path.GetDirectoryName(configurado);
+            if (!string.IsNullOrEmpty(pasta) && Directory.Exists(pasta))
+            {
+                lista.AddRange(Directory.EnumerateFiles(pasta, "*.bin")
+                    .Where(f => !string.Equals(f, configurado, StringComparison.OrdinalIgnoreCase)));
+            }
+            // No Whisper, maior = melhor: a ordem final é sempre por tamanho.
+            return lista.OrderByDescending(f => new FileInfo(f).Length).ToList();
+        }
+    }
 
     public string? CaminhoLlm => CandidatosLlm.FirstOrDefault();
 

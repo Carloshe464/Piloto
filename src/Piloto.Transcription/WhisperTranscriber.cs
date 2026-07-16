@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Piloto.Core.Abstractions;
 using Piloto.Core.Configuration;
 using Piloto.Core.Models;
+using Piloto.Core.Services;
 using Whisper.net;
 
 namespace Piloto.Transcription;
@@ -37,24 +38,66 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
         _log = log;
     }
 
+    /// <summary>Beam search só compensa em modelos maiores que small: a máquina que comporta
+    /// o medium também paga o custo extra de decodificação sem atrasar a fila de forma visível.</summary>
+    private const long LimiarModeloGrandeBytes = 300_000_000;
+
+    /// <summary>Segmentos com probabilidade média abaixo disto são alucinação de
+    /// silêncio/ruído ("www...", frases em inglês) com muito mais frequência do que fala real.</summary>
+    private const float ConfiancaMinima = 0.30f;
+
     public async Task<Transcript> TranscreverAsync(AudioCapture captura, CancellationToken ct = default)
     {
-        var caminhoModelo = _modelos.CaminhoWhisper
-            ?? throw new InvalidOperationException("Modelo Whisper ausente.");
-
+        var caminhoModelo = EscolherModelo();
         var factory = ObterFactory(caminhoModelo);
         var glossario = _glossarioProvider();
+        var usarBeam = new FileInfo(caminhoModelo).Length > LimiarModeloGrandeBytes;
 
         var segmentos = new List<TranscriptSegment>();
-        segmentos.AddRange(await TranscreverCanalAsync(factory, captura.CaminhoAtendente, Speaker.Atendente, glossario, ct).ConfigureAwait(false));
-        segmentos.AddRange(await TranscreverCanalAsync(factory, captura.CaminhoCliente, Speaker.Cliente, glossario, ct).ConfigureAwait(false));
+        segmentos.AddRange(await TranscreverCanalAsync(factory, usarBeam, captura.CaminhoAtendente, Speaker.Atendente, glossario, ct).ConfigureAwait(false));
+        segmentos.AddRange(await TranscreverCanalAsync(factory, usarBeam, captura.CaminhoCliente, Speaker.Cliente, glossario, ct).ConfigureAwait(false));
 
         // A fusão por timestamp acontece no construtor (ordena por início).
         return new Transcript(segmentos);
     }
 
+    /// <summary>
+    /// Usa o maior modelo que cabe na memória desta máquina (medium em 12 GB, small em
+    /// 4 GB). Se um candidato já está carregado, permanece nele — recarga é cara.
+    /// </summary>
+    private string EscolherModelo()
+    {
+        var candidatos = _modelos.CandidatosWhisper;
+        if (candidatos.Count == 0)
+            throw new InvalidOperationException("Modelo Whisper ausente.");
+
+        lock (_lock)
+        {
+            if (_caminhoCarregado is not null && candidatos.Contains(_caminhoCarregado))
+                return _caminhoCarregado;
+        }
+
+        foreach (var candidato in candidatos)
+        {
+            if (MemoriaComporta(candidato))
+                return candidato;
+            _log.LogInformation("Modelo Whisper {Modelo} não cabe na memória; tentando o próximo",
+                Path.GetFileName(candidato));
+        }
+        return candidatos[^1]; // menor disponível: transcrever é o núcleo do produto, sempre tenta
+    }
+
+    private static bool MemoriaComporta(string caminho)
+    {
+        if (!MemoriaDisponivel.TentarObter(out var fisica, out var commit))
+            return true; // sem leitura confiável, não bloqueia
+        // Pesos + buffers de computação do whisper.cpp: ~2x o arquivo, mais folga fixa.
+        var necessario = new FileInfo(caminho).Length * 2 + 256L * 1024 * 1024;
+        return Math.Min(fisica, commit) >= necessario;
+    }
+
     private async Task<List<TranscriptSegment>> TranscreverCanalAsync(
-        WhisperFactory factory, string caminhoWav, Speaker speaker, string? glossario, CancellationToken ct)
+        WhisperFactory factory, bool usarBeam, string caminhoWav, Speaker speaker, string? glossario, CancellationToken ct)
     {
         var resultado = new List<TranscriptSegment>();
         var info = new FileInfo(caminhoWav);
@@ -77,18 +120,35 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
 
         var builder = factory.CreateBuilder()
             .WithLanguage(_settings.Whisper.Idioma)   // "pt"
-            .WithThreads(_settings.Whisper.Threads);
+            .WithThreads(_settings.Whisper.Threads)
+            // Cada janela de 30 s é decodificada sem herdar o texto da anterior: uma
+            // alucinação num trecho silencioso não contamina o resto da ligação.
+            .WithNoContext()
+            .WithProbabilities();
         // Não chamamos WithTranslate(): mantém task=transcribe.
         if (!string.IsNullOrWhiteSpace(glossario))
             builder = builder.WithPrompt(glossario);   // initial_prompt
+        if (usarBeam)
+            builder = builder.WithBeamSearchSamplingStrategy().WithBeamSize(5).ParentBuilder;
 
         using var processor = builder.Build();
         await using var stream = File.OpenRead(caminhoWav);
 
+        var descartados = 0;
         await foreach (var seg in processor.ProcessAsync(stream, ct).ConfigureAwait(false))
         {
             var texto = seg.Text?.Trim();
             if (string.IsNullOrEmpty(texto)) continue;
+
+            // Alucinação de silêncio/ruído vem com confiança baixa; melhor perder um
+            // murmúrio real do que poluir o diálogo com lixo. Probability 0 = não
+            // calculada pela lib — nesse caso o segmento é mantido.
+            if (seg.Probability > 0f && seg.Probability < ConfiancaMinima)
+            {
+                descartados++;
+                continue;
+            }
+
             resultado.Add(new TranscriptSegment
             {
                 Speaker = speaker,
@@ -98,6 +158,8 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
             });
         }
 
+        if (descartados > 0)
+            _log.LogInformation("Canal {Speaker}: {N} segmento(s) descartado(s) por baixa confiança", speaker, descartados);
         _log.LogInformation("Canal {Speaker}: {N} segmentos", speaker, resultado.Count);
         return resultado;
     }

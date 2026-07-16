@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Text;
 using LLama;
 using LLama.Common;
@@ -8,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Piloto.Core.Abstractions;
 using Piloto.Core.Configuration;
 using Piloto.Core.Models;
+using Piloto.Core.Services;
 
 namespace Piloto.Llm;
 
@@ -180,7 +180,7 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
     /// </summary>
     private void GarantirMemoriaParaCarga(string caminho)
     {
-        if (!TentarObterMemoria(out var fisica, out var commit))
+        if (!MemoriaDisponivel.TentarObter(out var fisica, out var commit))
             return; // sem leitura confiável, não bloqueia a carga
 
         var necessario = NecessarioParaCarga(caminho);
@@ -206,7 +206,7 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
 
     private bool MemoriaComporta(string caminho)
     {
-        if (!TentarObterMemoria(out var fisica, out var commit))
+        if (!MemoriaDisponivel.TentarObter(out var fisica, out var commit))
             return true; // sem leitura confiável, não bloqueia
         return Math.Min(fisica, commit) >= NecessarioParaCarga(caminho);
     }
@@ -222,39 +222,6 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
         var margem = Math.Max(384L * 1024 * 1024, modelo / 3);
         return modelo + margem;
     }
-
-    private static bool TentarObterMemoria(out long fisicaBytes, out long commitBytes)
-    {
-        fisicaBytes = 0;
-        commitBytes = 0;
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return false;
-
-        var status = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
-        if (!GlobalMemoryStatusEx(ref status))
-            return false;
-
-        fisicaBytes = (long)status.ullAvailPhys;
-        commitBytes = (long)status.ullAvailPageFile;
-        return true;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MEMORYSTATUSEX
-    {
-        public uint dwLength;
-        public uint dwMemoryLoad;
-        public ulong ullTotalPhys;
-        public ulong ullAvailPhys;
-        public ulong ullTotalPageFile;
-        public ulong ullAvailPageFile;
-        public ulong ullTotalVirtual;
-        public ulong ullAvailVirtual;
-        public ulong ullAvailExtendedVirtual;
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
     public bool LiberarModelo()
     {

@@ -22,5 +22,12 @@ public interface IModelCatalog
     /// </summary>
     IReadOnlyList<string> CandidatosLlm { get; }
 
+    /// <summary>
+    /// Candidatos a modelo Whisper (.bin da pasta de modelos), do maior para o menor —
+    /// no Whisper, maior é melhor. O transcritor usa o maior que couber na RAM da máquina
+    /// (medium nas de 12 GB, small nas de 4 GB).
+    /// </summary>
+    IReadOnlyList<string> CandidatosWhisper { get; }
+
     IReadOnlyList<string> ModelosAusentes();
 }
