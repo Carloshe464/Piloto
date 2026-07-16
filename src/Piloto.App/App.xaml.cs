@@ -66,10 +66,30 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
+            var arquivo = RegistrarErroInicializacao(ex);
+            _log?.LogError(ex, "Falha ao iniciar o Piloto");
             MessageBox.Show(
-                "Falha ao iniciar o Piloto:\n\n" + ex.Message,
+                $"Falha ao iniciar o Piloto:\n\n[{ex.GetType().Name}] {ex.Message}\n\nDetalhes em:\n{arquivo}",
                 "Piloto", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
+        }
+    }
+
+    /// <summary>Grava o stack completo do erro de inicialização em um arquivo fácil de localizar.</summary>
+    private static string RegistrarErroInicializacao(Exception ex)
+    {
+        try
+        {
+            var pasta = Path.Combine(
+                Environment.ExpandEnvironmentVariables("%LOCALAPPDATA%"), "Piloto", "logs");
+            Directory.CreateDirectory(pasta);
+            var arquivo = Path.Combine(pasta, "startup-error.txt");
+            File.WriteAllText(arquivo, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\n{ex}");
+            return arquivo;
+        }
+        catch
+        {
+            return "(não foi possível gravar o arquivo de log)";
         }
     }
 

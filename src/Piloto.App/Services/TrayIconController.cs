@@ -1,6 +1,6 @@
+using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Controls;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using Hardcodet.Wpf.TaskbarNotification;
 
 namespace Piloto.App.Services;
@@ -8,6 +8,11 @@ namespace Piloto.App.Services;
 /// <summary>
 /// Ícone de bandeja: indicador visível de gravação (regra de privacidade), menu de contexto
 /// e notificações de novas transcrições.
+/// <para>
+/// Usa a propriedade <see cref="TaskbarIcon.Icon"/> (System.Drawing.Icon), e não
+/// <c>IconSource</c>: nesta versão do Hardcodet o setter de IconSource tenta
+/// <c>new Uri(imagem.ToString())</c> e falha ("Invalid URI") para imagens geradas em memória.
+/// </para>
 /// </summary>
 public sealed class TrayIconController : IDisposable
 {
@@ -15,8 +20,8 @@ public sealed class TrayIconController : IDisposable
     private readonly MenuItem _itemGravar;
     private readonly MenuItem _itemNaoGravar;
 
-    private static readonly ImageSource IconeOcioso = Bolinha(Color.FromRgb(0x6b, 0x72, 0x80));
-    private static readonly ImageSource IconeGravando = Bolinha(Color.FromRgb(0xdc, 0x26, 0x26));
+    private static readonly Icon IconeOcioso = CriarIcone(Color.FromArgb(0x6b, 0x72, 0x80));
+    private static readonly Icon IconeGravando = CriarIcone(Color.FromArgb(0xdc, 0x26, 0x26));
 
     public TrayIconController(Action abrir, Action alternarGravacao, Action naoGravar, Action configuracoes, Action sair)
     {
@@ -47,7 +52,7 @@ public sealed class TrayIconController : IDisposable
         _tray = new TaskbarIcon
         {
             ToolTipText = "Piloto — pronto",
-            IconSource = IconeOcioso,
+            Icon = IconeOcioso,
             ContextMenu = menu,
         };
         _tray.TrayMouseDoubleClick += (_, _) => abrir();
@@ -55,7 +60,7 @@ public sealed class TrayIconController : IDisposable
 
     public void AtualizarGravacao(bool gravando)
     {
-        _tray.IconSource = gravando ? IconeGravando : IconeOcioso;
+        _tray.Icon = gravando ? IconeGravando : IconeOcioso;
         _tray.ToolTipText = gravando ? "Piloto — GRAVANDO" : "Piloto — pronto";
         _itemGravar.Header = gravando ? "Parar e transcrever" : "Iniciar gravação";
         _itemNaoGravar.IsEnabled = gravando;
@@ -64,16 +69,18 @@ public sealed class TrayIconController : IDisposable
     public void Notificar(string titulo, string mensagem)
         => _tray.ShowBalloonTip(titulo, mensagem, BalloonIcon.Info);
 
-    private static ImageSource Bolinha(Color cor)
+    /// <summary>Desenha um ícone circular colorido (bandeja) sem depender de recursos/URIs.</summary>
+    private static Icon CriarIcone(Color cor)
     {
-        var visual = new DrawingVisual();
-        using (var dc = visual.RenderOpen())
-            dc.DrawEllipse(new SolidColorBrush(cor), null, new System.Windows.Point(16, 16), 13, 13);
-
-        var rtb = new RenderTargetBitmap(32, 32, 96, 96, PixelFormats.Pbgra32);
-        rtb.Render(visual);
-        rtb.Freeze();
-        return rtb;
+        using var bmp = new Bitmap(32, 32);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(Color.Transparent);
+            using var brush = new SolidBrush(cor);
+            g.FillEllipse(brush, 3, 3, 26, 26);
+        }
+        return Icon.FromHandle(bmp.GetHicon());
     }
 
     public void Dispose() => _tray.Dispose();
