@@ -14,16 +14,19 @@ public static class GbnfGrammarBuilder
     {
         var sb = new StringBuilder();
 
-        sb.AppendLine("""
-            root   ::= "{" ws
-              "\"resumo\":" ws string ws "," ws
-              "\"motivo_contato\":" ws motivo ws "," ws
-              "\"produto\":" ws produto ws "," ws
-              "\"status\":" ws status ws "," ws
-              "\"pedido\":" ws stringnull ws "," ws
-              "\"proximo_passo\":" ws stringnull ws
-            "}" ws
-            """);
+        // ATENÇÃO: no GBNF do llama.cpp, quebra de linha fora de parênteses ENCERRA a
+        // regra — uma regra em múltiplas linhas vira gramática malformada e o parser
+        // nativo derruba o processo inteiro na criação do sampler (sem exceção .NET).
+        // Por isso a root é montada em UMA linha. Teste de regressão cobre isso.
+        sb.AppendLine(
+            "root ::= \"{\" ws "
+            + Chave("resumo") + " ws string ws \",\" ws "
+            + Chave("motivo_contato") + " ws motivo ws \",\" ws "
+            + Chave("produto") + " ws produto ws \",\" ws "
+            + Chave("status") + " ws status ws \",\" ws "
+            + Chave("pedido") + " ws stringnull ws \",\" ws "
+            + Chave("proximo_passo") + " ws stringnull ws "
+            + "\"}\" ws");
         sb.AppendLine();
         sb.AppendLine("motivo  ::= " + Alternativas(listas.MotivoContato));
         sb.AppendLine("produto ::= " + Alternativas(listas.Produto));
@@ -38,6 +41,9 @@ public static class GbnfGrammarBuilder
 
         return sb.ToString();
     }
+
+    /// <summary>Literal GBNF de uma chave JSON: <c>"\"nome\":"</c>.</summary>
+    private static string Chave(string nome) => "\"\\\"" + nome + "\\\":\"";
 
     /// <summary>Alternância de literais JSON entre os valores da lista e <c>null</c>.</summary>
     private static string Alternativas(IReadOnlyList<string> valores)
