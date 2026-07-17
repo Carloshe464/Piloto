@@ -2,27 +2,14 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Piloto — Transcrição Local de Ligações"
-        Height="640" Width="1040"
-        MinHeight="480" MinWidth="820"
+        Height="680" Width="1080"
+        MinHeight="500" MinWidth="860"
         Background="{StaticResource Fundo}"
         WindowStartupLocation="CenterScreen">
 
-    <Window.Resources>
-        <Style TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource Painel}" />
-            <Setter Property="Foreground" Value="{StaticResource Texto}" />
-            <Setter Property="BorderBrush" Value="#334155" />
-            <Setter Property="Padding" Value="12,6" />
-            <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Texto}" />
-        </Style>
-    </Window.Resources>
-
-    <Grid Margin="16">
+    <Grid Margin="18">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -30,57 +17,130 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Banner modelos ausentes -->
-        <Border x:Name="BannerModelos" Grid.Row="0" Background="#78350f" CornerRadius="6"
-                Padding="12,8" Margin="0,0,0,12" Visibility="Collapsed">
-            <TextBlock x:Name="TxtBanner" TextWrapping="Wrap" Foreground="#fde68a"
-                       Text="Modelos ausentes — a fila está pausada." />
-        </Border>
-
-        <!-- Barra de ações -->
-        <DockPanel Grid.Row="1" Margin="0,0,0,12">
-            <Button x:Name="BtnGravar" Content="● Iniciar gravação" Click="BtnGravar_Click"
-                    Foreground="#fca5a5" FontWeight="SemiBold" />
-            <Button x:Name="BtnNaoGravar" Content="Não gravar esta chamada" Click="BtnNaoGravar_Click"
-                    IsEnabled="False" />
-            <Button Content="Configurações…" Click="BtnConfig_Click" DockPanel.Dock="Right" Margin="0" />
-            <Button Content="Atualizar" Click="BtnAtualizar_Click" DockPanel.Dock="Right" />
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <TextBox x:Name="TxtBusca" Width="240" VerticalContentAlignment="Center"
-                         Background="{StaticResource Painel}" Foreground="{StaticResource Texto}"
-                         BorderBrush="#334155" Padding="6,4" Margin="0,0,8,0"
-                         KeyDown="TxtBusca_KeyDown" />
-                <Button Content="Buscar" Click="BtnBuscar_Click" />
+        <!-- Cabeçalho: identidade + ações de janela -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,14">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                <Border Background="{StaticResource AcentoFundo}" CornerRadius="8"
+                        Width="38" Height="38" VerticalAlignment="Center">
+                    <TextBlock Text="P" FontSize="19" FontWeight="Bold"
+                               Foreground="{StaticResource AcentoClaro}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="Piloto" FontSize="18" FontWeight="Bold" />
+                    <TextBlock Text="Transcrição e resumo de ligações — 100% local"
+                               FontSize="11.5" Foreground="{StaticResource TextoFraco}" />
+                </StackPanel>
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right"
+                        VerticalAlignment="Center">
+                <Button Content="Atualizar" Click="BtnAtualizar_Click" />
+                <Button Content="Configurações" Click="BtnConfig_Click" Margin="0" />
             </StackPanel>
         </DockPanel>
 
-        <!-- Contadores -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,12">
-            <TextBlock x:Name="TxtTotal" Margin="0,0,24,0" Foreground="{StaticResource TextoFraco}" Text="Chamadas: 0" />
-            <TextBlock x:Name="TxtTempo" Margin="0,0,24,0" Foreground="{StaticResource TextoFraco}" Text="Tempo falado: 00:00:00" />
-            <TextBlock x:Name="TxtRevisao" Margin="0,0,24,0" Foreground="{StaticResource Alerta}" Text="A revisar: 0" />
-            <TextBlock x:Name="TxtFila" Foreground="{StaticResource Acento}" Text="Fila: 0" />
+        <!-- Banner modelos ausentes -->
+        <Border x:Name="BannerModelos" Grid.Row="1" Background="{StaticResource AlertaFundo}"
+                BorderBrush="#92600A" BorderThickness="1" CornerRadius="8"
+                Padding="12,9" Margin="0,0,0,12" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="⚠" Foreground="{StaticResource Alerta}" FontSize="14"
+                           Margin="0,0,10,0" VerticalAlignment="Top" />
+                <TextBlock x:Name="TxtBanner" TextWrapping="Wrap" Foreground="{StaticResource AlertaClaro}"
+                           Text="Modelos ausentes — a fila está pausada." />
+            </StackPanel>
+        </Border>
+
+        <!-- Barra de ações -->
+        <DockPanel Grid.Row="2" Margin="0,0,0,12">
+            <Button x:Name="BtnGravar" Content="● Iniciar gravação" Click="BtnGravar_Click"
+                    Style="{StaticResource BotaoGravacao}" MinWidth="180" />
+            <Button x:Name="BtnNaoGravar" Content="Não gravar esta chamada" Click="BtnNaoGravar_Click"
+                    IsEnabled="False" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Grid VerticalAlignment="Center" Margin="0,0,8,0">
+                    <TextBox x:Name="TxtBusca" Width="270" KeyDown="TxtBusca_KeyDown" />
+                    <TextBlock Text="Buscar número, motivo, produto…"
+                               IsHitTestVisible="False" Margin="11,0,0,0"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextoApagado}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=TxtBusca}" Value="">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
+                <Button Content="Buscar" Click="BtnBuscar_Click" Margin="0" />
+            </StackPanel>
+        </DockPanel>
+
+        <!-- Métricas -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,12">
+            <Border Style="{StaticResource Chip}">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="7" Height="7" Fill="{StaticResource Acento}"
+                             VerticalAlignment="Center" Margin="0,0,7,0" />
+                    <TextBlock x:Name="TxtTotal" Text="Chamadas: 0" FontSize="12"
+                               Foreground="{StaticResource TextoFraco}" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Chip}">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="7" Height="7" Fill="{StaticResource Sucesso}"
+                             VerticalAlignment="Center" Margin="0,0,7,0" />
+                    <TextBlock x:Name="TxtTempo" Text="Tempo falado: 00:00:00" FontSize="12"
+                               Foreground="{StaticResource TextoFraco}" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Chip}">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="7" Height="7" Fill="{StaticResource Alerta}"
+                             VerticalAlignment="Center" Margin="0,0,7,0" />
+                    <TextBlock x:Name="TxtRevisao" Text="A revisar: 0" FontSize="12"
+                               Foreground="{StaticResource TextoFraco}" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Chip}">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="7" Height="7" Fill="{StaticResource AcentoClaro}"
+                             VerticalAlignment="Center" Margin="0,0,7,0" />
+                    <TextBlock x:Name="TxtFila" Text="Fila: 0" FontSize="12"
+                               Foreground="{StaticResource TextoFraco}" />
+                </StackPanel>
+            </Border>
         </StackPanel>
 
         <!-- Histórico -->
-        <ListView x:Name="ListaChamadas" Grid.Row="3"
-                  Background="{StaticResource Painel}" Foreground="{StaticResource Texto}"
-                  BorderBrush="#334155"
-                  MouseDoubleClick="Lista_MouseDoubleClick">
-            <ListView.View>
-                <GridView>
-                    <GridViewColumn Header="Data" Width="130" DisplayMemberBinding="{Binding Data}" />
-                    <GridViewColumn Header="Número" Width="130" DisplayMemberBinding="{Binding Numero}" />
-                    <GridViewColumn Header="Motivo" Width="200" DisplayMemberBinding="{Binding Motivo}" />
-                    <GridViewColumn Header="Produto" Width="160" DisplayMemberBinding="{Binding Produto}" />
-                    <GridViewColumn Header="Status" Width="180" DisplayMemberBinding="{Binding Status}" />
-                    <GridViewColumn Header="Duração" Width="90" DisplayMemberBinding="{Binding Duracao}" />
-                    <GridViewColumn Header="!" Width="30" DisplayMemberBinding="{Binding Revisao}" />
-                </GridView>
-            </ListView.View>
-        </ListView>
+        <Border Grid.Row="4" Style="{StaticResource Card}" Padding="10">
+            <ListView x:Name="ListaChamadas" MouseDoubleClick="Lista_MouseDoubleClick">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="DATA" Width="135" DisplayMemberBinding="{Binding Data}" />
+                        <GridViewColumn Header="NÚMERO" Width="130" DisplayMemberBinding="{Binding Numero}" />
+                        <GridViewColumn Header="MOTIVO" Width="210" DisplayMemberBinding="{Binding Motivo}" />
+                        <GridViewColumn Header="PRODUTO" Width="170" DisplayMemberBinding="{Binding Produto}" />
+                        <GridViewColumn Header="STATUS" Width="180" DisplayMemberBinding="{Binding Status}" />
+                        <GridViewColumn Header="DURAÇÃO" Width="90" DisplayMemberBinding="{Binding Duracao}" />
+                        <GridViewColumn Header="" Width="36">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Revisao}" Foreground="{StaticResource Alerta}"
+                                               FontSize="13" HorizontalAlignment="Center" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+        </Border>
 
-        <TextBlock x:Name="TxtStatus" Grid.Row="4" Margin="0,10,0,0"
+        <TextBlock x:Name="TxtStatus" Grid.Row="5" Margin="2,10,0,0" FontSize="12"
                    Foreground="{StaticResource TextoFraco}" Text="Pronto." />
     </Grid>
 </Window>

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Windows;
 using Microsoft.Win32;
+using Piloto.App.ViewModels;
 using Piloto.Core.Abstractions;
 using Piloto.Core.Models;
 using Piloto.Data.Export;
@@ -23,9 +24,11 @@ public partial class DetailWindow : Window
     private void Preencher()
     {
         var m = _registro.Metadata;
-        var numero = string.IsNullOrWhiteSpace(m.Numero) ? "—" : PiiMasker.Mascarar(m.Numero);
-        TxtCabecalho.Text = $"#{_registro.Id} • {_registro.CriadoEm.LocalDateTime:dd/MM/yyyy HH:mm} • "
-                            + $"Número {numero} • Ticket {m.TicketId ?? "—"} • {_registro.Duracao:hh\\:mm\\:ss}";
+        TxtCabecalho.Text = $"Ligação #{_registro.Id}";
+        TxtChipData.Text = _registro.CriadoEm.LocalDateTime.ToString("dd/MM/yyyy HH:mm");
+        TxtChipNumero.Text = string.IsNullOrWhiteSpace(m.Numero) ? "—" : PiiMasker.Mascarar(m.Numero);
+        TxtChipTicket.Text = m.TicketId ?? "—";
+        TxtChipDuracao.Text = _registro.Duracao.ToString(@"hh\:mm\:ss");
 
         if (_registro.PrecisaRevisao)
         {
@@ -34,15 +37,31 @@ public partial class DetailWindow : Window
         }
 
         var r = _registro.Resumo;
-        TxtResumo.Text = "Resumo: " + Ou(PiiMasker.Mascarar(r.Resumo));
-        TxtMotivo.Text = "Motivo do contato: " + Ou(r.MotivoContato);
-        TxtProduto.Text = "Produto: " + Ou(r.Produto);
-        TxtStatus.Text = "Status: " + Ou(r.Status);
-        TxtPedido.Text = "Pedido: " + Ou(PiiMasker.Mascarar(r.Pedido));
-        TxtProximo.Text = "Próximo passo: " + Ou(PiiMasker.Mascarar(r.ProximoPasso));
+        TxtResumo.Text = Ou(PiiMasker.Mascarar(r.Resumo));
+        TxtMotivo.Text = Ou(r.MotivoContato, "—");
+        TxtProduto.Text = Ou(r.Produto, "—");
+        TxtStatus.Text = Ou(r.Status, "—");
+        TxtPedido.Text = Ou(PiiMasker.Mascarar(r.Pedido));
+        TxtProximo.Text = Ou(PiiMasker.Mascarar(r.ProximoPasso));
 
         TxtCampos.Text = MontarCampos();
-        TxtDialogo.Text = PiiMasker.Mascarar(_registro.Transcript.TextoRotulado());
+        PreencherDialogo();
+    }
+
+    private void PreencherDialogo()
+    {
+        var linhas = _registro.Transcript.Segmentos
+            .Select(s => new LinhaDialogoVm
+            {
+                Rotulo = s.Speaker.Rotulo(),
+                Horario = s.Inicio.ToString(@"mm\:ss"),
+                Texto = PiiMasker.Mascarar(s.Texto.Trim()),
+                EhAtendente = s.Speaker == Speaker.Atendente,
+            })
+            .ToList();
+
+        ListaDialogo.ItemsSource = linhas;
+        TxtDialogoVazio.Visibility = linhas.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private string MontarCampos()
@@ -91,7 +110,18 @@ public partial class DetailWindow : Window
         }
     }
 
+    private void CopiarDialogo_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Clipboard.SetText(PiiMasker.Mascarar(_registro.Transcript.TextoRotulado()));
+            BtnCopiarDialogo.Content = "Copiado ✓";
+        }
+        catch { /* clipboard ocupado por outro app — ignora */ }
+    }
+
     private void Fechar_Click(object sender, RoutedEventArgs e) => Close();
 
-    private static string Ou(string? s) => string.IsNullOrWhiteSpace(s) ? "Não identificado" : s;
+    private static string Ou(string? s, string vazio = "Não identificado")
+        => string.IsNullOrWhiteSpace(s) ? vazio : s;
 }

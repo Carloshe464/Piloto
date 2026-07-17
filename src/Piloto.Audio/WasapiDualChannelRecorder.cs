@@ -35,8 +35,18 @@ public sealed class WasapiDualChannelRecorder : IAudioRecorder
     private DateTimeOffset _inicio;
     private CallMetadata _metadata = CallMetadata.Vazio();
 
+    // Pico absoluto observado em cada canal durante a chamada (0..1). Detecta microfone
+    // mudo/baixíssimo — a causa mais comum de "transcrição ruim" que ninguém percebe.
+    private float _picoMic;
+    private float _picoLoop;
+    private Timer? _timerNivel;
+
+    private const float PicoMicMinimo = 0.02f;   // abaixo disto a fala é inaproveitável
+    private const float PicoLoopMinimo = 0.005f; // loopback totalmente mudo
+
     public bool EstaGravando { get; private set; }
     public event EventHandler<bool>? EstadoGravacaoMudou;
+    public event EventHandler<string>? AvisoCaptura;
 
     public WasapiDualChannelRecorder(AppSettings settings, ILogger<WasapiDualChannelRecorder> log)
     {
@@ -64,8 +74,30 @@ public sealed class WasapiDualChannelRecorder : IAudioRecorder
             _micWriter = new WaveFileWriter(_micTemp, _mic.WaveFormat);
             _loopWriter = new WaveFileWriter(_loopTemp, _loopback.WaveFormat);
 
-            _mic.DataAvailable += (_, e) => Escrever(_micWriter, e);
-            _loopback.DataAvailable += (_, e) => Escrever(_loopWriter, e);
+            var fmtMic = _mic.WaveFormat;
+            var fmtLoop = _loopback.WaveFormat;
+            _mic.DataAvailable += (_, e) =>
+            {
+                _picoMic = Math.Max(_picoMic, PicoDoBuffer(e, fmtMic));
+                Escrever(_micWriter, e);
+            };
+            _loopback.DataAvailable += (_, e) =>
+            {
+                _picoLoop = Math.Max(_picoLoop, PicoDoBuffer(e, fmtLoop));
+                Escrever(_loopWriter, e);
+            };
+
+            _picoMic = 0f;
+            _picoLoop = 0f;
+
+            // Checagem única aos 8 s: se o microfone segue mudo, avisa o atendente
+            // enquanto ainda dá para ajeitar o headset — em vez de descobrir no fim.
+            _timerNivel = new Timer(_ =>
+            {
+                if (EstaGravando && _picoMic < PicoLoopMinimo)
+                    AvisoCaptura?.Invoke(this,
+                        "Nenhum áudio no microfone até agora — verifique o headset.");
+            }, null, TimeSpan.FromSeconds(8), Timeout.InfiniteTimeSpan);
 
             _mic.StartRecording();
             _loopback.StartRecording();
@@ -104,6 +136,17 @@ public sealed class WasapiDualChannelRecorder : IAudioRecorder
             ApagarSilenciosamente(_micTemp!);
             ApagarSilenciosamente(_loopTemp!);
 
+            // Voz baixa é a causa nº 1 de transcrição ruim com captura "ok".
+            NormalizarVolume(micFinal);
+            NormalizarVolume(loopFinal);
+
+            if (_picoMic < PicoMicMinimo)
+                _metadata.AvisosCaptura.Add(
+                    "Áudio do atendente ausente ou baixíssimo na gravação — verifique o microfone do headset.");
+            if (_picoLoop < PicoLoopMinimo)
+                _metadata.AvisosCaptura.Add(
+                    "Nenhum áudio do cliente foi captado — verifique a saída de som do headset.");
+
             EstaGravando = false;
             EstadoGravacaoMudou?.Invoke(this, false);
 
@@ -138,6 +181,9 @@ public sealed class WasapiDualChannelRecorder : IAudioRecorder
 
     private void PararCapturas()
     {
+        _timerNivel?.Dispose();
+        _timerNivel = null;
+
         try { _mic?.StopRecording(); } catch { /* ignore */ }
         try { _loopback?.StopRecording(); } catch { /* ignore */ }
 
@@ -175,6 +221,71 @@ public sealed class WasapiDualChannelRecorder : IAudioRecorder
         {
             _log.LogError(ex, "Falha ao converter {Origem}; mantendo o WAV nativo", origem);
             File.Copy(origem, destino, overwrite: true);
+        }
+    }
+
+    /// <summary>Pico absoluto (0..1) do buffer capturado. Formato desconhecido devolve 1
+    /// para nunca gerar alarme falso de "sem áudio".</summary>
+    private static float PicoDoBuffer(WaveInEventArgs e, WaveFormat formato)
+    {
+        if (e.BytesRecorded <= 0) return 0f;
+
+        if (formato.Encoding == WaveFormatEncoding.IeeeFloat && formato.BitsPerSample == 32)
+        {
+            var pico = 0f;
+            for (var i = 0; i + 4 <= e.BytesRecorded; i += 4)
+                pico = Math.Max(pico, Math.Abs(BitConverter.ToSingle(e.Buffer, i)));
+            return pico;
+        }
+
+        if (formato.Encoding == WaveFormatEncoding.Pcm && formato.BitsPerSample == 16)
+        {
+            var pico = 0f;
+            for (var i = 0; i + 2 <= e.BytesRecorded; i += 2)
+                pico = Math.Max(pico, Math.Abs(BitConverter.ToInt16(e.Buffer, i)) / 32768f);
+            return pico;
+        }
+
+        return 1f;
+    }
+
+    /// <summary>
+    /// Eleva o volume do WAV até pico ~0,9 quando a gravação saiu baixa. Silêncio absoluto
+    /// não é amplificado (só subiria o ruído) e áudio já alto não é tocado.
+    /// </summary>
+    private void NormalizarVolume(string caminho)
+    {
+        try
+        {
+            if (!File.Exists(caminho)) return;
+
+            float pico = 0f;
+            using (var reader = new AudioFileReader(caminho))
+            {
+                var buf = new float[16384];
+                int lidos;
+                while ((lidos = reader.Read(buf, 0, buf.Length)) > 0)
+                    for (var i = 0; i < lidos; i++)
+                        pico = Math.Max(pico, Math.Abs(buf[i]));
+            }
+
+            if (pico < PicoMicMinimo || pico > 0.85f) return;
+
+            var ganho = Math.Min(0.9f / pico, 20f);
+            var temp = caminho + ".norm";
+            using (var reader = new AudioFileReader(caminho))
+            {
+                var vol = new VolumeSampleProvider(reader) { Volume = ganho };
+                WaveFileWriter.CreateWaveFile16(temp, vol);
+            }
+            File.Delete(caminho);
+            File.Move(temp, caminho);
+            _log.LogInformation("Volume normalizado ({Arquivo}): pico {Pico:F2} -> 0,90",
+                Path.GetFileName(caminho), pico);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Falha ao normalizar volume de {Caminho}", caminho);
         }
     }
 

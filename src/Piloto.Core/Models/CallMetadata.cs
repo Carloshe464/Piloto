@@ -17,5 +17,11 @@ public sealed class CallMetadata
     /// <summary>Payload bruto recebido da extensão (para auditoria/depuração).</summary>
     public string? OrigemJson { get; set; }
 
+    /// <summary>
+    /// Problemas detectados durante a captura (ex.: microfone mudo). Persistem com o item
+    /// da fila e viram motivo de revisão no registro — falha de áudio nunca é silenciosa.
+    /// </summary>
+    public List<string> AvisosCaptura { get; set; } = new();
+
     public static CallMetadata Vazio() => new();
 }

@@ -25,6 +25,7 @@ public sealed class RecordingCoordinator
     public CallMetadata MetadataCorrente { get { lock (_lock) return _metadataCorrente; } }
 
     public event EventHandler<bool>? EstadoGravacaoMudou;
+    public event EventHandler<string>? AvisoCaptura;
     public event EventHandler? MetadataMudou;
 
     public RecordingCoordinator(
@@ -39,6 +40,7 @@ public sealed class RecordingCoordinator
         _log = log;
 
         _recorder.EstadoGravacaoMudou += (_, gravando) => EstadoGravacaoMudou?.Invoke(this, gravando);
+        _recorder.AvisoCaptura += (_, msg) => AvisoCaptura?.Invoke(this, msg);
         _bridge.MetadataAtualizada += (_, meta) => AtualizarMetadata(meta);
         _bridge.ChamadaIniciada += (_, meta) => AtualizarMetadata(meta);
         _bridge.ChamadaEncerrada += (_, meta) => AtualizarMetadata(meta);

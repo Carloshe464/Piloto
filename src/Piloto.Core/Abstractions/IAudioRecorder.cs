@@ -20,4 +20,8 @@ public interface IAudioRecorder
     void Descartar();
 
     event EventHandler<bool>? EstadoGravacaoMudou;
+
+    /// <summary>Alerta em tempo real de problema na captura (ex.: microfone sem áudio),
+    /// para a UI avisar o atendente enquanto ainda dá para corrigir.</summary>
+    event EventHandler<string>? AvisoCaptura;
 }

@@ -108,6 +108,11 @@ public sealed class TranscriptionPipeline
         if (erroLlm is not null)
             registro.MarcarRevisao($"Resumo automático indisponível — erro no LLM: {erroLlm}");
 
+        // Problemas detectados na captura (mic mudo etc.) viram revisão com causa explícita:
+        // transcrição ruim por áudio ruim nunca passa como se fosse normal.
+        foreach (var aviso in captura.Metadata.AvisosCaptura)
+            registro.MarcarRevisao(aviso);
+
         _log.LogInformation("Grounding (camada 3)");
         _grounding.Aplicar(registro, listas);
 

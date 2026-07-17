@@ -66,6 +66,9 @@ public partial class App : Application
             coordinator.EstadoGravacaoMudou += (_, gravando) =>
                 Dispatcher.Invoke(() => _tray!.AtualizarGravacao(gravando));
 
+            coordinator.AvisoCaptura += (_, msg) =>
+                Dispatcher.Invoke(() => _tray!.Notificar("Piloto — captura de áudio", msg));
+
             queue.RegistroProcessado += (_, reg) => Dispatcher.Invoke(() =>
             {
                 _tray!.Notificar("Piloto", reg.PrecisaRevisao

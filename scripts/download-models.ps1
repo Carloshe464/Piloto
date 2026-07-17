@@ -10,9 +10,9 @@
 [CmdletBinding()]
 param(
     [string]$Destino = (Join-Path $env:LOCALAPPDATA 'Piloto\models'),
-    # auto: decide pela RAM (>= 7 GB -> medium, muito melhor em PT-BR; menos -> small).
+    # auto: decide pela RAM (>= 7 GB -> turbo [large-v3-turbo, o melhor local]; menos -> small).
     # O app usa em runtime o maior modelo presente que couber na memória.
-    [ValidateSet('auto', 'small', 'base', 'medium')]
+    [ValidateSet('auto', 'small', 'base', 'medium', 'turbo')]
     [string]$Whisper = 'auto',
     # auto: decide pela RAM da máquina (>= 7 GB -> 4b; menos -> 1b). O app usa o que couber
     # na memória em runtime, então não é preciso ajustar o config ao baixar o 1b.
@@ -40,6 +40,11 @@ $modelos = @{
     'medium' = @{
         Nome = 'ggml-medium-q5_0.bin'
         Url  = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin'
+    }
+    # large-v3-turbo quantizado: qualidade de large com arquivo de ~570 MB — o teto local.
+    'turbo' = @{
+        Nome = 'ggml-large-v3-turbo-q5_0.bin'
+        Url  = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin'
     }
 }
 
@@ -96,7 +101,7 @@ function Get-Modelo($nome, $url) {
 $ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
 
 if ($Whisper -eq 'auto') {
-    $Whisper = if ($ramGb -ge 7) { 'medium' } else { 'small' }
+    $Whisper = if ($ramGb -ge 7) { 'turbo' } else { 'small' }
     Write-Passo "RAM total: $ramGb GB -> Whisper $Whisper"
 }
 $w = $modelos[$Whisper]
