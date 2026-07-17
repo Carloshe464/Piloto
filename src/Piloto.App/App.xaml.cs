@@ -69,11 +69,15 @@ public partial class App : Application
             coordinator.AvisoCaptura += (_, msg) =>
                 Dispatcher.Invoke(() => _tray!.Notificar("Piloto — captura de áudio", msg));
 
+            queue.ItemIniciado += (_, id) => Dispatcher.Invoke(() =>
+                _main!.MostrarStatus($"Processando ligação #{id} em segundo plano — transcrição e resumo a caminho…"));
+
             queue.RegistroProcessado += (_, reg) => Dispatcher.Invoke(() =>
             {
                 _tray!.Notificar("Piloto", reg.PrecisaRevisao
                     ? "Nova transcrição pronta — precisa de revisão"
                     : "Nova transcrição pronta");
+                _main!.MostrarStatus($"Ligação #{reg.Id} pronta — transcrição e resumo disponíveis.");
                 _main!.Recarregar();
             });
 

@@ -85,7 +85,9 @@ public sealed class WhisperSettings
 {
     public string Modelo { get; set; } = "ggml-small-q5_1.bin";
     public string Idioma { get; set; } = "pt";
-    public int Threads { get; set; } = 5;
+
+    /// <summary>0 = automático (metade dos threads lógicos da máquina, entre 2 e 8).</summary>
+    public int Threads { get; set; } = 0;
 }
 
 public sealed class LlmSettings
@@ -93,7 +95,10 @@ public sealed class LlmSettings
     public bool Habilitado { get; set; } = true;
     public string Modelo { get; set; } = "gemma-3-4b-it-Q4_K_M.gguf";
     public float Temperatura { get; set; } = 0f;
-    public int Threads { get; set; } = 5;
+
+    /// <summary>0 = automático (metade dos threads lógicos da máquina, entre 2 e 8).</summary>
+    public int Threads { get; set; } = 0;
+
     public int Contexto { get; set; } = 4096;
 
     /// <summary>Força a saída JSON por gramática GBNF. Válvula de escape: desligue se a

@@ -35,6 +35,10 @@ public sealed class QueueProcessor : IAsyncDisposable
     public event EventHandler<CallRecord>? RegistroProcessado;
     public event EventHandler? FilaMudou;
 
+    /// <summary>Disparado quando um item começa a ser processado (id do item) — a UI
+    /// mostra que o trabalho está em andamento em vez de silêncio.</summary>
+    public event EventHandler<long>? ItemIniciado;
+
     public QueueProcessor(ICallRepository repo, TranscriptionPipeline pipeline, IModelCatalog modelos, ILogger<QueueProcessor> log)
     {
         _repo = repo;
@@ -110,6 +114,7 @@ public sealed class QueueProcessor : IAsyncDisposable
         item.AtualizadoEm = DateTimeOffset.Now;
         _repo.AtualizarItem(item);
         FilaMudou?.Invoke(this, EventArgs.Empty);
+        ItemIniciado?.Invoke(this, item.Id);
 
         try
         {

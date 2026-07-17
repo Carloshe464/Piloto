@@ -96,6 +96,9 @@ public partial class MainWindow : Window
         AtualizarBanner();
     }
 
+    /// <summary>Atualiza a linha de status (usada pelo App para refletir a fila).</summary>
+    public void MostrarStatus(string texto) => TxtStatus.Text = texto;
+
     public void Recarregar()
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(Recarregar); return; }

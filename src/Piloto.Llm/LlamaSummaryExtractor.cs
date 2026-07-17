@@ -144,7 +144,7 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
             {
                 ContextSize = (uint)_settings.Llm.Contexto,
                 GpuLayerCount = 0, // CPU
-                Threads = _settings.Llm.Threads,
+                Threads = Hardware.ResolverThreads(_settings.Llm.Threads),
             };
             var weights = LLamaWeights.LoadFromFile(parameters);
 

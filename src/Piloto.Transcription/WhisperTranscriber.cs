@@ -51,7 +51,8 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
         var caminhoModelo = EscolherModelo();
         var factory = ObterFactory(caminhoModelo);
         var glossario = _glossarioProvider();
-        var usarBeam = new FileInfo(caminhoModelo).Length > LimiarModeloGrandeBytes;
+        var usarBeam = new FileInfo(caminhoModelo).Length > LimiarModeloGrandeBytes
+                       && Hardware.CpuComportaBeam;
 
         var segmentos = new List<TranscriptSegment>();
         segmentos.AddRange(await TranscreverCanalAsync(factory, usarBeam, captura.CaminhoAtendente, Speaker.Atendente, glossario, ct).ConfigureAwait(false));
@@ -120,7 +121,7 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
 
         var builder = factory.CreateBuilder()
             .WithLanguage(_settings.Whisper.Idioma)   // "pt"
-            .WithThreads(_settings.Whisper.Threads)
+            .WithThreads(Hardware.ResolverThreads(_settings.Whisper.Threads))
             // Cada janela de 30 s é decodificada sem herdar o texto da anterior: uma
             // alucinação num trecho silencioso não contamina o resto da ligação.
             .WithNoContext()

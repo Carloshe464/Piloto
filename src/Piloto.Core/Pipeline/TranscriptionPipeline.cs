@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Piloto.Core.Abstractions;
 using Piloto.Core.Configuration;
 using Piloto.Core.Models;
+using Piloto.Core.Services;
 
 namespace Piloto.Core.Pipeline;
 
@@ -69,9 +70,11 @@ public sealed class TranscriptionPipeline
         string? erroLlm = null;
         if (_settings.Llm.Habilitado && _modelos.LlmDisponivel)
         {
-            // Whisper e LLM nunca precisam coexistir na memória: libera o primeiro antes
-            // de carregar o segundo. Custo: recarregar o Whisper na próxima ligação.
-            _transcriber.LiberarModelo();
+            // Libera o Whisper antes do LLM apenas quando a memória exige: em máquinas
+            // com folga, mantê-lo carregado poupa ~20 s de recarga na ligação seguinte;
+            // nas de pouca RAM, a folga liberada decide se o resumo roda.
+            if (!MemoriaComportaLlmSemLiberarWhisper())
+                _transcriber.LiberarModelo();
 
             _log.LogInformation("Resumindo com LLM local (camada 2)");
             try
@@ -120,5 +123,31 @@ public sealed class TranscriptionPipeline
             _log.LogWarning("Registro marcado para revisão: {Motivos}", string.Join(" | ", registro.MotivosRevisao));
 
         return registro;
+    }
+
+    /// <summary>
+    /// True quando a memória atual comporta carregar o LLM sem descartar o Whisper.
+    /// Usa a mesma régua do guard do extractor (arquivo + máx(384 MB, 1/3)). Sem leitura
+    /// confiável de memória, responde false — o caminho conservador (liberar) prevalece.
+    /// </summary>
+    private bool MemoriaComportaLlmSemLiberarWhisper()
+    {
+        var caminho = _modelos.CandidatosLlm.FirstOrDefault();
+        if (caminho is null)
+            return true;
+
+        if (!MemoriaDisponivel.TentarObter(out var fisica, out var commit))
+            return false;
+
+        try
+        {
+            var tamanho = new FileInfo(caminho).Length;
+            var necessario = tamanho + Math.Max(384L * 1024 * 1024, tamanho / 3);
+            return Math.Min(fisica, commit) >= necessario;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
     }
 }
