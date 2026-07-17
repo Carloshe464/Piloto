@@ -74,21 +74,32 @@ function Get-Modelo($nome, $url) {
 
     # Baixa em arquivo temporário e renomeia no fim: um download interrompido nunca
     # deixa um modelo truncado com o nome final (que seria "pulado" na próxima execução).
+    # O parcial NÃO é apagado entre tentativas: com -C - o curl retoma do ponto onde
+    # parou — essencial em redes instáveis (queda no meio de 2,3 GB recomeçava do zero).
     $temp = "$alvo.baixando"
-    if (Test-Path $temp) { Remove-Item $temp -Force }
 
     # Invoke-WebRequest no Windows PowerShell 5.1 carrega o arquivo INTEIRO em memória
     # (estoura com modelos de GBs). curl.exe (nativo do Win10 1803+) faz streaming.
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
     if ($curl) {
-        & $curl.Source -L --fail --retry 3 --retry-delay 5 -o $temp $url
-        if ($LASTEXITCODE -ne 0) {
-            if (Test-Path $temp) { Remove-Item $temp -Force }
-            throw "Falha ao baixar $nome (curl saiu com código $LASTEXITCODE)."
+        $maxTentativas = 8
+        for ($tentativa = 1; $tentativa -le $maxTentativas; $tentativa++) {
+            & $curl.Source -L --fail -C - --retry 3 --retry-delay 5 -o $temp $url
+            if ($LASTEXITCODE -eq 0) { break }
+
+            # 33 = servidor recusou retomar deste ponto; recomeça limpo.
+            if ($LASTEXITCODE -eq 33 -and (Test-Path $temp)) { Remove-Item $temp -Force }
+
+            if ($tentativa -eq $maxTentativas) {
+                throw "Falha ao baixar $nome apos $maxTentativas tentativas (curl saiu com codigo $LASTEXITCODE)."
+            }
+            Write-Passo "Conexao caiu (curl $LASTEXITCODE) - retomando do ponto onde parou (tentativa $($tentativa + 1)/$maxTentativas)..."
+            Start-Sleep -Seconds 10
         }
     }
     else {
-        # Fallback: WebClient também faz streaming direto para o disco.
+        # Fallback: WebClient também faz streaming direto para o disco (sem retomada).
+        if (Test-Path $temp) { Remove-Item $temp -Force }
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
         (New-Object Net.WebClient).DownloadFile($url, $temp)
     }
