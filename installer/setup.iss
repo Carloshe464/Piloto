@@ -2,7 +2,7 @@
 ; Gera installer\Output\PilotoSetup-<versao>.exe. Rode via scripts\build-installer.ps1 ou no CI.
 
 #define MyAppName "Piloto"
-#define MyAppVersion "0.6.3"
+#define MyAppVersion "0.7.0"
 #define MyAppPublisher "Piloto"
 #define MyAppExeName "Piloto.exe"
 ; Mesmo nome criado por App.xaml.cs — é como o setup detecta o app em execução.

@@ -39,8 +39,10 @@ async function conectar() {
   }
 }
 
-function enviar(obj) {
-  ultimaMensagem = obj;
+function enviar(obj, lembrar = true) {
+  // Chunks de áudio nunca são "lembrados": reenviar um chunk velho após
+  // reconexão corromperia a gravação em andamento.
+  if (lembrar) ultimaMensagem = obj;
   if (socket && socket.readyState === WebSocket.OPEN) {
     try { socket.send(JSON.stringify(obj)); return true; }
     catch (e) { console.warn('[Piloto] falha ao enviar', e); }
@@ -49,10 +51,18 @@ function enviar(obj) {
   return false;
 }
 
+const TIPOS_METADATA = new Set(['metadata', 'call_started', 'call_ended']);
+const TIPOS_AUDIO = new Set(['audio_inicio', 'audio_chunk', 'audio_fim']);
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.tipo === 'metadata' || msg?.tipo === 'call_started' || msg?.tipo === 'call_ended') {
+  if (TIPOS_METADATA.has(msg?.tipo)) {
     const enviado = enviar(msg);
     sendResponse({ ok: enviado, estado: estado() });
+    return true;
+  }
+  if (TIPOS_AUDIO.has(msg?.tipo)) {
+    const enviado = enviar(msg, /* lembrar */ false);
+    sendResponse({ ok: enviado });
     return true;
   }
   if (msg?.tipo === 'status') {

@@ -48,6 +48,7 @@ public static class CompositionRoot
         services.AddSingleton<ITranscriber, WhisperTranscriber>();
         services.AddSingleton<ILlmExtractor, LlamaSummaryExtractor>();
         services.AddSingleton<IAudioRecorder, WasapiDualChannelRecorder>();
+        services.AddSingleton<ExtensionAudioRecorder>();
         services.AddSingleton<TranscriptionPipeline>();
         services.AddSingleton<QueueProcessor>();
         services.AddSingleton<CallEnqueuer>();

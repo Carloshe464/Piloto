@@ -31,6 +31,15 @@ public sealed class ZendeskBridgeServer : IAsyncDisposable
     public event EventHandler<CallMetadata>? ChamadaIniciada;
     public event EventHandler<CallMetadata>? ChamadaEncerrada;
 
+    /// <summary>Extensão começou a transmitir áudio da chamada (taxa de amostragem em Hz).</summary>
+    public event EventHandler<int>? AudioIniciado;
+
+    /// <summary>Bloco PCM16 de um canal ("atendente"/"cliente").</summary>
+    public event EventHandler<AudioChunkEventArgs>? AudioChunkRecebido;
+
+    /// <summary>Extensão encerrou a transmissão de áudio (fim da chamada).</summary>
+    public event EventHandler? AudioEncerrado;
+
     public ZendeskBridgeServer(int porta, ILogger<ZendeskBridgeServer> log)
     {
         _porta = porta;
@@ -165,6 +174,21 @@ public sealed class ZendeskBridgeServer : IAsyncDisposable
             case BridgeMessageTypes.ChamadaEncerrada:
                 metadata.EncerradaEm = DateTimeOffset.Now;
                 ChamadaEncerrada?.Invoke(this, metadata);
+                break;
+            case BridgeMessageTypes.AudioInicio:
+                AudioIniciado?.Invoke(this, msg.Taxa is > 0 ? msg.Taxa.Value : 16000);
+                break;
+            case BridgeMessageTypes.AudioChunk:
+                if (!string.IsNullOrEmpty(msg.Canal) && !string.IsNullOrEmpty(msg.Dados))
+                {
+                    byte[] dados;
+                    try { dados = Convert.FromBase64String(msg.Dados); }
+                    catch (FormatException) { break; }
+                    AudioChunkRecebido?.Invoke(this, new AudioChunkEventArgs(msg.Canal, dados));
+                }
+                break;
+            case BridgeMessageTypes.AudioFim:
+                AudioEncerrado?.Invoke(this, EventArgs.Empty);
                 break;
             case BridgeMessageTypes.Ping:
                 break;

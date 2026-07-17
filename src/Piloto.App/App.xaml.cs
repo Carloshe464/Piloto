@@ -69,6 +69,9 @@ public partial class App : Application
             coordinator.AvisoCaptura += (_, msg) =>
                 Dispatcher.Invoke(() => _tray!.Notificar("Piloto — captura de áudio", msg));
 
+            coordinator.ChamadaEnfileirada += (_, id) => Dispatcher.Invoke(() =>
+                _main!.MostrarStatus($"Chamada #{id} enfileirada — captura automática pela extensão."));
+
             queue.ItemIniciado += (_, id) => Dispatcher.Invoke(() =>
                 _main!.MostrarStatus($"Processando ligação #{id} em segundo plano — transcrição e resumo a caminho…"));
 

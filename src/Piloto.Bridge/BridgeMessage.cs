@@ -25,6 +25,20 @@ public sealed class BridgeMessage
     [JsonPropertyName("atendente")]
     public string? Atendente { get; set; }
 
+    // ----- Áudio capturado pela extensão (hook WebRTC no softphone) -----
+
+    /// <summary>"atendente" ou "cliente".</summary>
+    [JsonPropertyName("canal")]
+    public string? Canal { get; set; }
+
+    /// <summary>PCM16 mono little-endian em base64.</summary>
+    [JsonPropertyName("dados")]
+    public string? Dados { get; set; }
+
+    /// <summary>Taxa de amostragem do PCM (Hz); a extensão envia 16000.</summary>
+    [JsonPropertyName("taxa")]
+    public int? Taxa { get; set; }
+
     public CallMetadata ParaMetadata() => new()
     {
         Numero = Numero,
@@ -40,5 +54,24 @@ public static class BridgeMessageTypes
     public const string Metadata = "metadata";
     public const string ChamadaIniciada = "call_started";
     public const string ChamadaEncerrada = "call_ended";
+    public const string AudioInicio = "audio_inicio";
+    public const string AudioChunk = "audio_chunk";
+    public const string AudioFim = "audio_fim";
     public const string Ping = "ping";
+}
+
+/// <summary>Um bloco de áudio PCM16 recebido da extensão.</summary>
+public sealed class AudioChunkEventArgs : EventArgs
+{
+    public AudioChunkEventArgs(string canal, byte[] dados)
+    {
+        Canal = canal;
+        Dados = dados;
+    }
+
+    /// <summary>"atendente" ou "cliente".</summary>
+    public string Canal { get; }
+
+    /// <summary>PCM16 mono little-endian.</summary>
+    public byte[] Dados { get; }
 }

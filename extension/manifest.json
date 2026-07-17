@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Piloto — Ponte Zendesk",
-  "version": "0.1.0",
-  "description": "Lê metadados da ligação no DOM do Zendesk e envia ao app Piloto via WebSocket local (127.0.0.1).",
+  "version": "0.2.0",
+  "description": "Lê metadados da ligação no Zendesk e captura o áudio da chamada (WebRTC do softphone 55PBX), enviando ao app Piloto via WebSocket local (127.0.0.1).",
   "permissions": ["storage", "alarms"],
   "host_permissions": [
     "*://*.zendesk.com/*",
+    "*://*.55pbx.com/*",
     "http://127.0.0.1/*"
   ],
   "background": {
@@ -16,6 +17,19 @@
       "matches": ["*://*.zendesk.com/*"],
       "js": ["content-zendesk.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.zendesk.com/*", "*://*.55pbx.com/*"],
+      "js": ["rtc-hook.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["*://*.zendesk.com/*", "*://*.55pbx.com/*"],
+      "js": ["content-audio.js"],
+      "run_at": "document_start",
+      "all_frames": true
     }
   ],
   "action": {
