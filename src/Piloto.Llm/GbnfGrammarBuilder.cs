@@ -55,7 +55,17 @@ public static class GbnfGrammarBuilder
         return string.Join(" | ", todas);
     }
 
-    /// <summary>Escapa um valor para aparecer dentro de um literal de string GBNF.</summary>
+    /// <summary>
+    /// Escapa um valor para aparecer dentro de um literal de string GBNF.
+    /// <para>
+    /// Todo caractere fora do ASCII imprimível vira escape <c>\uXXXX</c> (suportado pelo
+    /// GBNF do llama.cpp). Isso é OBRIGATÓRIO: o P/Invoke de AddGrammar no LLamaSharp
+    /// 0.25 marshala a string em ANSI, então um "ú" cru chega como byte inválido em
+    /// UTF-8 — o parser nativo rejeita a gramática, devolve NULL e o sampler nulo
+    /// derruba o processo inteiro no primeiro token. ASCII puro sobrevive a qualquer
+    /// marshaling. Teste de regressão cobre isso.
+    /// </para>
+    /// </summary>
     private static string EscaparGbnf(string valor)
     {
         var sb = new StringBuilder(valor.Length);
@@ -65,7 +75,12 @@ public static class GbnfGrammarBuilder
             {
                 case '\\': sb.Append("\\\\"); break;
                 case '"': sb.Append("\\\""); break;
-                default: sb.Append(c); break;
+                default:
+                    if (c < 0x20 || c > 0x7E)
+                        sb.Append("\\u").Append(((int)c).ToString("x4"));
+                    else
+                        sb.Append(c);
+                    break;
             }
         }
         return sb.ToString();

@@ -1,4 +1,4 @@
-using Piloto.Core.Configuration;
+﻿using Piloto.Core.Configuration;
 using Piloto.Llm;
 using Xunit;
 
@@ -40,13 +40,25 @@ public class GbnfGrammarBuilderTests
     }
 
     [Fact]
-    public void ValoresDasListasEntramComoLiteraisComNull()
+    public void AcentosViramEscapeUnicodeNuncaCaractereCru()
     {
         var gramatica = GbnfGrammarBuilder.Construir(Listas());
 
-        Assert.Contains("Dúvida", gramatica);
-        Assert.Contains("Reclamação", gramatica);
+        Assert.Contains(@"D\u00favida", gramatica);
+        Assert.Contains(@"Reclama\u00e7\u00e3o", gramatica);
         Assert.Contains("Plano Premium", gramatica);
         Assert.Contains("\"null\"", gramatica);
+    }
+
+    [Fact]
+    public void GramaticaEhAsciiPuro()
+    {
+        // O P/Invoke de AddGrammar no LLamaSharp 0.25 marshala em ANSI; qualquer byte
+        // não-ASCII chega inválido em UTF-8, o parser nativo devolve NULL e o sampler
+        // nulo DERRUBA O PROCESSO no primeiro token. ASCII puro é requisito, não estilo.
+        var gramatica = GbnfGrammarBuilder.Construir(Listas());
+
+        foreach (var c in gramatica)
+            Assert.True(c <= 0x7E, $"Caractere não-ASCII na gramática: '{c}' (U+{(int)c:X4})");
     }
 }

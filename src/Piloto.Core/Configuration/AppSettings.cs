@@ -95,6 +95,10 @@ public sealed class LlmSettings
     public float Temperatura { get; set; } = 0f;
     public int Threads { get; set; } = 5;
     public int Contexto { get; set; } = 4096;
+
+    /// <summary>Força a saída JSON por gramática GBNF. Válvula de escape: desligue se a
+    /// gramática causar problema em campo — o parser tolerante + grounding seguram o resto.</summary>
+    public bool Gramatica { get; set; } = true;
 }
 
 public sealed class FilaSettings

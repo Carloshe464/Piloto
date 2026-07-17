@@ -56,10 +56,13 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
         // Saída determinística (temperatura 0) e restrita por gramática GBNF: o modelo só
         // consegue emitir o JSON com as seis chaves, e motivo/produto/status saem das listas
         // fechadas (ou null). O grounding (camada 3) continua como última barreira.
+        // "gramatica": false no config desliga a restrição (válvula de escape em campo).
         using var pipeline = new DefaultSamplingPipeline
         {
             Temperature = _settings.Llm.Temperatura,
-            Grammar = new Grammar(GbnfGrammarBuilder.Construir(listas), "root"),
+            Grammar = _settings.Llm.Gramatica
+                ? new Grammar(GbnfGrammarBuilder.Construir(listas), "root")
+                : null,
         };
 
         var inference = new InferenceParams
