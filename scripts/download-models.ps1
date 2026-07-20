@@ -111,20 +111,30 @@ function Get-Modelo($nome, $url) {
 
 $ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
 
+# A RAM total engana: quem decide em runtime é a memória LIVRE com Chrome+Zendesk
+# abertos — nas máquinas da operação (12 GB) sobra ~1,3 GB e o Gemma 4B (~3,1 GB para
+# carregar) nunca cabe. Por isso o 'auto' baixa TAMBÉM o modelo pequeno de cada tipo:
+# é a rede de segurança para onde o app cai quando o grande não couber naquele momento.
 if ($Whisper -eq 'auto') {
-    $Whisper = if ($ramGb -ge 7) { 'turbo' } else { 'small' }
-    Write-Passo "RAM total: $ramGb GB -> Whisper $Whisper"
+    $listaWhisper = if ($ramGb -ge 7) { @('turbo', 'small') } else { @('small') }
+    Write-Passo "RAM total: $ramGb GB -> Whisper $($listaWhisper -join ' + ')"
 }
-$w = $modelos[$Whisper]
-Get-Modelo $w.Nome $w.Url
+else { $listaWhisper = @($Whisper) }
+foreach ($chave in $listaWhisper) {
+    $m = $modelos[$chave]
+    Get-Modelo $m.Nome $m.Url
+}
 
 if (-not $SemLlm) {
     if ($Llm -eq 'auto') {
-        $Llm = if ($ramGb -ge 7) { '4b' } else { '1b' }
-        Write-Passo "RAM total: $ramGb GB -> LLM $Llm"
+        $listaLlm = if ($ramGb -ge 7) { @('4b', '1b') } else { @('1b') }
+        Write-Passo "RAM total: $ramGb GB -> LLM $($listaLlm -join ' + ')"
     }
-    $l = $llms[$Llm]
-    Get-Modelo $l.Nome $l.Url
+    else { $listaLlm = @($Llm) }
+    foreach ($chave in $listaLlm) {
+        $m = $llms[$chave]
+        Get-Modelo $m.Nome $m.Url
+    }
 }
 else {
     Write-Passo 'LLM ignorado (-SemLlm).'

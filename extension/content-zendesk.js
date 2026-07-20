@@ -26,11 +26,18 @@ function texto(seletor) {
   return t ? String(t).trim() || null : null;
 }
 
+// Agent Workspace navega para /agent/tickets/12345 quando um ticket está aberto —
+// independe de seletor de DOM e funciona em qualquer conta/versão do Zendesk.
+function ticketDaUrl() {
+  const m = location.href.match(/\/(?:agent\/)?tickets\/(\d+)/);
+  return m ? m[1] : null;
+}
+
 function coletar() {
   return {
     tipo: 'metadata',
     numero: texto(SELETORES.numero),
-    ticket: texto(SELETORES.ticket),
+    ticket: ticketDaUrl() || texto(SELETORES.ticket),
     status: texto(SELETORES.status),
     atendente: texto(SELETORES.atendente),
   };

@@ -7,7 +7,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <Company>Piloto</Company>
     <Product>Piloto — Transcrição Local de Ligações</Product>
-    <Version>0.7.2</Version>
+    <Version>0.7.3</Version>
     <NeutralLanguage>pt-BR</NeutralLanguage>
   </PropertyGroup>
 </Project>

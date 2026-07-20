@@ -48,13 +48,19 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
     private const float ConfiancaMinima = 0.30f;
 
     /// <summary>Silêncio/ruído também vira texto que o Whisper decorou do treinamento —
-    /// URLs soltas, créditos de legenda — e nesses a probabilidade vem ALTA (o modelo
-    /// confia no que decorou), então o filtro de confiança não pega: o padrão textual pega.
-    /// Ninguém dita uma URL como fala inteira numa ligação; "www ponto..." falado vem
-    /// transcrito por extenso, não como URL montada.</summary>
+    /// URLs soltas, créditos de legenda, etiquetas como "[MÚSICA DE FUNDO]" — e nesses a
+    /// probabilidade vem ALTA (o modelo confia no que decorou), então o filtro de
+    /// confiança não pega: o padrão textual pega. Ninguém dita uma URL como fala inteira
+    /// numa ligação; "www ponto..." falado vem transcrito por extenso, não como URL montada.</summary>
     private static readonly Regex PadraoAlucinacao = new(
-        @"^\W*(?:www\.|https?://)\S+\W*$|amara\.org|legendas pela comunidade|subtitles by|legendado por",
+        @"^\W*(?:www\.|https?://)\S+\W*$|amara\.org|legendas pela comunidade|subtitles by|legendado por" +
+        @"|^\W*[\[\(][^\]\)]{1,80}[\]\)]\W*$|^[\W_]+$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>Proíbe já no decode os tokens de anotação ("[Música]", "♪"): música de
+    /// espera e ringback deixam de virar "fala" no diálogo. Sintaxe ECMAScript (std::regex
+    /// do whisper.cpp), casada por regex_match contra o token INTEIRO — daí o ".*".</summary>
+    private const string SupressaoTokens = @".*[\[\]♪].*";
 
     public async Task<Transcript> TranscreverAsync(AudioCapture captura, CancellationToken ct = default)
     {
@@ -135,6 +141,7 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
             // Cada janela de 30 s é decodificada sem herdar o texto da anterior: uma
             // alucinação num trecho silencioso não contamina o resto da ligação.
             .WithNoContext()
+            .WithSuppressRegex(SupressaoTokens)
             .WithProbabilities();
         // Não chamamos WithTranslate(): mantém task=transcribe.
         if (!string.IsNullOrWhiteSpace(glossario))

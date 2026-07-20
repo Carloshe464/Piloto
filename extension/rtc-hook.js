@@ -77,7 +77,7 @@
     sessao = {
       ctx,
       inicioMs: performance.now(),
-      canais: new Map(), // canal -> { bus, proc, mudo, fontes: Map<track, {fonte, el, pc}>, fila, enviadas, flush }
+      canais: new Map(), // canal -> { bus, aa1, aa2, proc, mudo, fontes: Map<track, {fonte, el, pc}>, fila, enviadas, flush }
       pcs: new Set(),
       timerFim: null,
     };
@@ -97,12 +97,18 @@
     if (info) return info;
 
     const bus = s.ctx.createGain();
+    // A reamostragem por interpolação linear não filtra nada: sem um passa-baixas antes,
+    // o conteúdo acima de 8 kHz dobra para dentro da banda (aliasing) e suja o áudio que
+    // o Whisper recebe. Dois biquads em cascata ≈ 24 dB/oitava acima do corte.
+    const aa1 = s.ctx.createBiquadFilter();
+    const aa2 = s.ctx.createBiquadFilter();
+    for (const f of [aa1, aa2]) { f.type = 'lowpass'; f.frequency.value = 7000; f.Q.value = 0.7071; }
     const proc = s.ctx.createScriptProcessor(TAMANHO_BUFFER, 1, 1);
     const mudo = s.ctx.createGain();
     mudo.gain.value = 0; // o processor precisa chegar ao destino, mas sem eco audível
 
     info = {
-      bus, proc, mudo,
+      bus, aa1, aa2, proc, mudo,
       fontes: new Map(),
       fila: [],
       enviadas: 0,
@@ -134,7 +140,9 @@
       } catch (_) {}
     };
 
-    bus.connect(proc);
+    bus.connect(aa1);
+    aa1.connect(aa2);
+    aa2.connect(proc);
     proc.connect(mudo);
     mudo.connect(s.ctx.destination);
     s.canais.set(canal, info);
@@ -226,7 +234,10 @@
         try { f.fonte.disconnect(); } catch (_) {}
         if (f.el) { try { f.el.srcObject = null; } catch (_) {} }
       }
-      try { info.bus.disconnect(); info.proc.disconnect(); info.mudo.disconnect(); } catch (_) {}
+      try {
+        info.bus.disconnect(); info.aa1.disconnect(); info.aa2.disconnect();
+        info.proc.disconnect(); info.mudo.disconnect();
+      } catch (_) {}
       console.log('[Piloto] hook: canal "' + canal + '" enviou ' +
         (info.enviadas / TAXA_ALVO).toFixed(1) + ' s de áudio');
     }

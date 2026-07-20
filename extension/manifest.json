@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Piloto — Ponte Zendesk",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Lê metadados da ligação no Zendesk e captura o áudio da chamada (WebRTC do softphone 55PBX), enviando ao app Piloto via WebSocket local (127.0.0.1).",
   "permissions": ["storage", "alarms"],
   "host_permissions": [
