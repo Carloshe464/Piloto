@@ -57,10 +57,10 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
         @"|^\W*[\[\(][^\]\)]{1,80}[\]\)]\W*$|^[\W_]+$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    /// <summary>Proíbe já no decode os tokens de anotação ("[Música]", "♪"): música de
-    /// espera e ringback deixam de virar "fala" no diálogo. Sintaxe ECMAScript (std::regex
-    /// do whisper.cpp), casada por regex_match contra o token INTEIRO — daí o ".*".</summary>
-    private const string SupressaoTokens = @".*[\[\]♪].*";
+    // NUNCA usar WithSuppressRegex aqui: o whisper.cpp compila e roda o regex contra os
+    // ~51 mil tokens do vocabulário A CADA token decodificado — numa CPU fraca de 4
+    // threads, 1 min de ligação passou de segundos para muitos minutos (regressão da
+    // 0.7.3). O filtro pós-decode (PadraoAlucinacao) pega as mesmas etiquetas de graça.
 
     public async Task<Transcript> TranscreverAsync(AudioCapture captura, CancellationToken ct = default)
     {
@@ -141,7 +141,6 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
             // Cada janela de 30 s é decodificada sem herdar o texto da anterior: uma
             // alucinação num trecho silencioso não contamina o resto da ligação.
             .WithNoContext()
-            .WithSuppressRegex(SupressaoTokens)
             .WithProbabilities();
         // Não chamamos WithTranslate(): mantém task=transcribe.
         if (!string.IsNullOrWhiteSpace(glossario))
