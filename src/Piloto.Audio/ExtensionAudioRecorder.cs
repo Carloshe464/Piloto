@@ -13,8 +13,14 @@ namespace Piloto.Audio;
 /// </summary>
 public sealed class ExtensionAudioRecorder
 {
-    private const float PicoMicMinimo = 0.02f;
-    private const float PicoClienteMinimo = 0.005f;
+    /// <summary>Pico mínimo de um chunk para contar como "sinal audível". Ruído de linha
+    /// fica abaixo; fala em telefonia fica bem acima.</summary>
+    private const float PicoAudivel = 0.02f;
+
+    /// <summary>Canal com menos que isto de sinal audível na chamada inteira é captura
+    /// falha (lado mudo), não conversa — um único pico de ruído não desarma o aviso.</summary>
+    private const double SegundosAudiveisMinimos = 1.0;
+
     private static readonly TimeSpan DuracaoMinima = TimeSpan.FromSeconds(1);
 
     private readonly AppSettings _settings;
@@ -26,8 +32,8 @@ public sealed class ExtensionAudioRecorder
     private string? _caminhoAtendente;
     private string? _caminhoCliente;
     private int _taxa = 16000;
-    private float _picoAtendente;
-    private float _picoCliente;
+    private double _segundosAudiveisAtendente;
+    private double _segundosAudiveisCliente;
     private DateTimeOffset _inicio;
     private CallMetadata _metadata = CallMetadata.Vazio();
 
@@ -49,8 +55,8 @@ public sealed class ExtensionAudioRecorder
             _metadata = metadata;
             _taxa = taxa;
             _inicio = DateTimeOffset.Now;
-            _picoAtendente = 0f;
-            _picoCliente = 0f;
+            _segundosAudiveisAtendente = 0;
+            _segundosAudiveisCliente = 0;
 
             var stamp = _inicio.ToString("yyyyMMdd-HHmmss");
             var id = Guid.NewGuid().ToString("N")[..8];
@@ -77,9 +83,10 @@ public sealed class ExtensionAudioRecorder
             if (writer is null) return;
             writer.Write(dados, 0, dados.Length);
 
-            var pico = PicoPcm16(dados);
-            if (canal == "atendente") _picoAtendente = Math.Max(_picoAtendente, pico);
-            else _picoCliente = Math.Max(_picoCliente, pico);
+            if (PicoPcm16(dados) < PicoAudivel) return;
+            var segundos = dados.Length / (double)(_taxa * 2);
+            if (canal == "atendente") _segundosAudiveisAtendente += segundos;
+            else _segundosAudiveisCliente += segundos;
         }
     }
 
@@ -107,12 +114,12 @@ public sealed class ExtensionAudioRecorder
                 return null;
             }
 
-            if (_picoAtendente < PicoMicMinimo)
+            if (_segundosAudiveisAtendente < SegundosAudiveisMinimos)
                 _metadata.AvisosCaptura.Add(
-                    "Áudio do atendente ausente ou baixíssimo na captura da extensão — verifique o microfone.");
-            if (_picoCliente < PicoClienteMinimo)
+                    $"Áudio do atendente ausente ou inaudível na captura da extensão ({_segundosAudiveisAtendente:0.0} s de sinal) — verifique o microfone.");
+            if (_segundosAudiveisCliente < SegundosAudiveisMinimos)
                 _metadata.AvisosCaptura.Add(
-                    "Nenhum áudio do cliente na captura da extensão — verifique o softphone.");
+                    $"Áudio do cliente ausente ou inaudível na captura da extensão ({_segundosAudiveisCliente:0.0} s de sinal) — a fala do cliente na transcrição não é confiável.");
 
             _metadata.IniciadaEm ??= _inicio;
             _metadata.EncerradaEm ??= fim;

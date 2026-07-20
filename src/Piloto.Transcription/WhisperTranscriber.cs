@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Piloto.Core.Abstractions;
 using Piloto.Core.Configuration;
@@ -45,6 +46,15 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
     /// <summary>Segmentos com probabilidade média abaixo disto são alucinação de
     /// silêncio/ruído ("www...", frases em inglês) com muito mais frequência do que fala real.</summary>
     private const float ConfiancaMinima = 0.30f;
+
+    /// <summary>Silêncio/ruído também vira texto que o Whisper decorou do treinamento —
+    /// URLs soltas, créditos de legenda — e nesses a probabilidade vem ALTA (o modelo
+    /// confia no que decorou), então o filtro de confiança não pega: o padrão textual pega.
+    /// Ninguém dita uma URL como fala inteira numa ligação; "www ponto..." falado vem
+    /// transcrito por extenso, não como URL montada.</summary>
+    private static readonly Regex PadraoAlucinacao = new(
+        @"^\W*(?:www\.|https?://)\S+\W*$|amara\.org|legendas pela comunidade|subtitles by|legendado por",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public async Task<Transcript> TranscreverAsync(AudioCapture captura, CancellationToken ct = default)
     {
@@ -150,6 +160,13 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
                 continue;
             }
 
+            if (PadraoAlucinacao.IsMatch(texto))
+            {
+                descartados++;
+                _log.LogInformation("Canal {Speaker}: alucinação descartada: {Texto}", speaker, texto);
+                continue;
+            }
+
             resultado.Add(new TranscriptSegment
             {
                 Speaker = speaker,
@@ -160,7 +177,7 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
         }
 
         if (descartados > 0)
-            _log.LogInformation("Canal {Speaker}: {N} segmento(s) descartado(s) por baixa confiança", speaker, descartados);
+            _log.LogInformation("Canal {Speaker}: {N} segmento(s) descartado(s) (baixa confiança ou alucinação)", speaker, descartados);
         _log.LogInformation("Canal {Speaker}: {N} segmentos", speaker, resultado.Count);
         return resultado;
     }
