@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
     Baixa os modelos GGML (Whisper) e GGUF (LLM) para %LOCALAPPDATA%\Piloto\models.
@@ -19,7 +19,9 @@ param(
     # 4b: qualidade padrão (~2,4 GB; exige ~8 GB de RAM). 1b: máquinas com 4 GB (~0,8 GB).
     [ValidateSet('auto', '4b', '1b')]
     [string]$Llm = 'auto',
-    [switch]$SemLlm
+    [switch]$SemLlm,
+    # Pula a remoção de modelos obsoletos de versões anteriores.
+    [switch]$SemLimpeza
 )
 
 $ErrorActionPreference = 'Stop'
@@ -138,6 +140,36 @@ if (-not $SemLlm) {
 }
 else {
     Write-Passo 'LLM ignorado (-SemLlm).'
+}
+
+# --- limpeza de modelos obsoletos -------------------------------------------
+# Atualização em cima de atualização acumula modelos de versões antigas: o uninstall
+# não toca na pasta de modelos (por desenho — são gigas baixados). Não é só disco:
+# o app escolhe modelo por tamanho ("maior = melhor"), então um legado maior que o
+# atual ganha a preferência e ocupa mais RAM à toa (ex.: medium de 539 MB competindo
+# com o turbo). Remove APENAS nomes que alguma versão deste script já baixou — arquivo
+# desconhecido (modelo colocado manualmente) é preservado com aviso. Roda depois dos
+# downloads (nunca deixa a máquina sem modelo se um download falhar) e só no modo
+# 'auto', em que o conjunto desejado é o curado; escolha explícita não apaga nada.
+if (-not $SemLimpeza -and $Whisper -eq 'auto' -and ($SemLlm -or $Llm -eq 'auto')) {
+    $conhecidos = @($modelos.Values | ForEach-Object { $_.Nome })
+    if (-not $SemLlm) { $conhecidos += @($llms.Values | ForEach-Object { $_.Nome }) }
+
+    $desejados = @($listaWhisper | ForEach-Object { $modelos[$_].Nome })
+    if (-not $SemLlm) { $desejados += @($listaLlm | ForEach-Object { $llms[$_].Nome }) }
+
+    Get-ChildItem $Destino -File | ForEach-Object {
+        $nomeBase = $_.Name -replace '\.baixando$', ''
+        if ($desejados -contains $nomeBase) { return }
+        if ($conhecidos -contains $nomeBase) {
+            $mb = [math]::Round($_.Length / 1MB, 1)
+            Write-Passo "Removendo modelo obsoleto: $($_.Name) ($mb MB)"
+            Remove-Item $_.FullName -Force
+        }
+        elseif ($_.Extension -in '.bin', '.gguf') {
+            Write-Host "    Mantido (nao gerenciado por este script): $($_.Name)" -ForegroundColor Yellow
+        }
+    }
 }
 
 Write-Host ''

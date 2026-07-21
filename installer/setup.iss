@@ -2,7 +2,7 @@
 ; Gera installer\Output\PilotoSetup-<versao>.exe. Rode via scripts\build-installer.ps1 ou no CI.
 
 #define MyAppName "Piloto"
-#define MyAppVersion "0.7.5"
+#define MyAppVersion "0.7.6"
 #define MyAppPublisher "Piloto"
 #define MyAppExeName "Piloto.exe"
 ; Mesmo nome criado por App.xaml.cs — é como o setup detecta o app em execução.
@@ -44,6 +44,8 @@ Source: "..\publish\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 Source: "..\extension\*"; DestDir: "{app}\extension"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Script de download dos modelos (para rodar direto na máquina de teste)
 Source: "..\scripts\download-models.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+; Monitor de logs ao vivo (fase piloto: acompanhar o app em tempo real na máquina de teste)
+Source: "..\scripts\monitor-logs.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -51,6 +53,10 @@ Name: "{group}\Baixar modelos (Whisper + Gemma)"; Filename: "{sys}\WindowsPowerS
   Parameters: "-NoExit -ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\download-models.ps1"""; \
   WorkingDir: "{app}\scripts"; \
   Comment: "Baixa os modelos para %LOCALAPPDATA%\Piloto\models"
+Name: "{group}\{#MyAppName} — Logs ao vivo"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
+  Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\monitor-logs.ps1"""; \
+  WorkingDir: "{app}\scripts"; \
+  Comment: "Acompanha em tempo real o que o Piloto está fazendo (logs do dia)"
 Name: "{group}\Desinstalar {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
