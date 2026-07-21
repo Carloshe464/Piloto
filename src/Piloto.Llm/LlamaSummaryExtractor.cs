@@ -216,13 +216,16 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
 
     /// <summary>
     /// Além dos pesos (mmap, mas viram working set ao inferir), o llama.cpp aloca KV cache
-    /// + buffers de computação, que crescem com o modelo. Margem proporcional: não afrouxa
-    /// a proteção do 4B e ainda deixa o Gemma 1B caber em máquinas de 4 GB.
+    /// + buffers de computação, que crescem com o modelo e o contexto. A margem de 384 MB
+    /// provou ser fina demais em campo: o 1B passou no teste com ~140 MB de sobra e o
+    /// malloc nativo abortou o processo no meio da carga/inferência — queda que nenhum
+    /// try/catch .NET alcança e que derrubava o app em loop a cada reabertura. Margem
+    /// generosa converte o crash em "registro sem resumo", que é o comportamento honesto.
     /// </summary>
     private static long NecessarioParaCarga(string caminho)
     {
         var modelo = new FileInfo(caminho).Length;
-        var margem = Math.Max(384L * 1024 * 1024, modelo / 3);
+        var margem = Math.Max(768L * 1024 * 1024, modelo / 2);
         return modelo + margem;
     }
 

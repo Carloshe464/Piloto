@@ -138,6 +138,23 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
         }
     }
 
+    public IReadOnlyList<QueueItem> ItensErroSemRegistro()
+    {
+        lock (_lock)
+        {
+            using var cmd = Conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT id, audio_atendente, audio_cliente, metadata_json, estado, tentativas, ultimo_erro, criado_em, atualizado_em, registro_id
+                FROM queue WHERE estado = $erro AND registro_id IS NULL ORDER BY id ASC;
+                """;
+            cmd.Parameters.AddWithValue("$erro", (int)QueueState.Erro);
+            using var r = cmd.ExecuteReader();
+            var lista = new List<QueueItem>();
+            while (r.Read()) lista.Add(LerQueueItem(r));
+            return lista;
+        }
+    }
+
     // ---------------------------------------------------------------- Registros
 
     public long SalvarRegistro(CallRecord r)

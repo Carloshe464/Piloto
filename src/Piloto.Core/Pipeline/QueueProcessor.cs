@@ -64,6 +64,8 @@ public sealed class QueueProcessor : IAsyncDisposable
         }
         catch (Exception ex) { _log.LogError(ex, "Falha ao recuperar itens órfãos da fila"); }
 
+        MaterializarItensComErro();
+
         _cts = new CancellationTokenSource();
         _loop = Task.Factory.StartNew(
             () => LoopAsync(_cts.Token),
@@ -140,6 +142,8 @@ public sealed class QueueProcessor : IAsyncDisposable
             item.AtualizadoEm = DateTimeOffset.Now;
             _repo.AtualizarItem(item);
             _log.LogError(ex, "Falha ao processar item {Id} (tentativa {N})", item.Id, item.Tentativas);
+            if (item.Estado == QueueState.Erro)
+                MaterializarItensComErro();
             FilaMudou?.Invoke(this, EventArgs.Empty);
         }
         finally
@@ -165,6 +169,49 @@ public sealed class QueueProcessor : IAsyncDisposable
                     (int)DescargaAposOciosidade.TotalMinutes, Environment.WorkingSet / 1_048_576);
         }
         catch (Exception ex) { _log.LogError(ex, "Falha ao descarregar modelos ociosos"); }
+    }
+
+    /// <summary>
+    /// Item que esgotou as tentativas nunca chegaria à UI: a ligação simplesmente sumia
+    /// (crash nativo derruba o processo sem passar pelo catch, e o item morria em Erro
+    /// sem registro). Materializa um registro marcado para revisão — a ligação aparece
+    /// no histórico com o motivo, e o áudio fica preservado para conferência.
+    /// </summary>
+    private void MaterializarItensComErro()
+    {
+        IReadOnlyList<QueueItem> itens;
+        try { itens = _repo.ItensErroSemRegistro(); }
+        catch (Exception ex) { _log.LogError(ex, "Falha ao listar itens com erro sem registro"); return; }
+
+        foreach (var item in itens)
+        {
+            try
+            {
+                var captura = ReconstruirCaptura(item);
+                var registro = new CallRecord
+                {
+                    Metadata = captura.Metadata,
+                    CriadoEm = DateTimeOffset.Now,
+                    Duracao = captura.Duracao,
+                    CaminhoAudioAtendente = captura.CaminhoAtendente,
+                    CaminhoAudioCliente = captura.CaminhoCliente,
+                };
+                registro.MarcarRevisao(
+                    $"Processamento não concluído após {MaxTentativas} tentativa(s) — provável falta de memória na máquina. " +
+                    $"Último erro: {item.UltimoErro ?? "app encerrado inesperadamente"}. Áudio preservado em disco.");
+
+                registro.Id = _repo.SalvarRegistro(registro);
+                item.RegistroId = registro.Id;
+                item.AtualizadoEm = DateTimeOffset.Now;
+                _repo.AtualizarItem(item);
+
+                _log.LogWarning("Item {Item} esgotou as tentativas — registro {Registro} criado marcado para revisão",
+                    item.Id, registro.Id);
+                RegistroProcessado?.Invoke(this, registro);
+            }
+            catch (Exception ex) { _log.LogError(ex, "Falha ao materializar registro do item {Id}", item.Id); }
+        }
+        if (itens.Count > 0) FilaMudou?.Invoke(this, EventArgs.Empty);
     }
 
     private static AudioCapture ReconstruirCaptura(QueueItem item)

@@ -22,6 +22,14 @@ public interface ICallRepository
     /// </summary>
     int RecuperarItensOrfaos(int maxTentativas);
 
+    /// <summary>
+    /// Itens em Erro que nunca geraram registro — tipicamente vítimas de queda repetida
+    /// do processo (crash nativo não passa pelo catch do processador). São materializados
+    /// como registro marcado para revisão na subida da fila: a ligação aparece na UI em
+    /// vez de sumir em silêncio.
+    /// </summary>
+    IReadOnlyList<QueueItem> ItensErroSemRegistro();
+
     // ----- Registros -----
     long SalvarRegistro(CallRecord registro);
     CallRecord? ObterRegistro(long id);

@@ -68,7 +68,14 @@ public sealed class TranscriptionPipeline
         // e os campos objetivos, que já custaram a passada do Whisper, são preservados.
         LlmSummary resumo;
         string? erroLlm = null;
-        if (_settings.Llm.Habilitado && _modelos.LlmDisponivel)
+        if (transcript.EstaVazio)
+        {
+            // Sem fala não há o que resumir — e carregar o LLM à toa é justamente o passo
+            // mais arriscado numa máquina sem memória. O registro sai marcado adiante.
+            _log.LogWarning("Transcrição vazia — LLM pulado");
+            resumo = LlmSummary.Vazio();
+        }
+        else if (_settings.Llm.Habilitado && _modelos.LlmDisponivel)
         {
             // Libera o Whisper antes do LLM apenas quando a memória exige: em máquinas
             // com folga, mantê-lo carregado poupa ~20 s de recarga na ligação seguinte;
@@ -111,6 +118,11 @@ public sealed class TranscriptionPipeline
         if (erroLlm is not null)
             registro.MarcarRevisao($"Resumo automático indisponível — erro no LLM: {erroLlm}");
 
+        // Uma ligação real sem NENHUMA fala reconhecível é falha (captura ou transcrição),
+        // nunca um registro "válido" de aparência normal.
+        if (transcript.EstaVazio)
+            registro.MarcarRevisao("Transcrição vazia — nenhuma fala reconhecível no áudio; confira a gravação preservada.");
+
         // Problemas detectados na captura (mic mudo etc.) viram revisão com causa explícita:
         // transcrição ruim por áudio ruim nunca passa como se fosse normal.
         foreach (var aviso in captura.Metadata.AvisosCaptura)
@@ -127,7 +139,7 @@ public sealed class TranscriptionPipeline
 
     /// <summary>
     /// True quando a memória atual comporta carregar o LLM sem descartar o Whisper.
-    /// Usa a mesma régua do guard do extractor (arquivo + máx(384 MB, 1/3)). Sem leitura
+    /// Usa a mesma régua do guard do extractor (arquivo + máx(768 MB, 1/2)). Sem leitura
     /// confiável de memória, responde false — o caminho conservador (liberar) prevalece.
     /// </summary>
     private bool MemoriaComportaLlmSemLiberarWhisper()
@@ -142,7 +154,7 @@ public sealed class TranscriptionPipeline
         try
         {
             var tamanho = new FileInfo(caminho).Length;
-            var necessario = tamanho + Math.Max(384L * 1024 * 1024, tamanho / 3);
+            var necessario = tamanho + Math.Max(768L * 1024 * 1024, tamanho / 2);
             return Math.Min(fisica, commit) >= necessario;
         }
         catch (IOException)
