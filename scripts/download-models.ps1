@@ -30,23 +30,31 @@ $ProgressPreference = 'SilentlyContinue'  # acelera Invoke-WebRequest
 function Write-Passo($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 
 # Fontes oficiais (Hugging Face). Ajuste os quantizados conforme o config.
+# Sha256 = lfs.oid oficial no Hugging Face. A retomada de download (curl -C -) em rede
+# instável pode montar arquivo corrompido — e GGUF corrompido derruba o app na carga
+# nativa, sem erro legível. Todo arquivo é verificado: o existente antes de "pular", o
+# baixado antes de valer.
 $modelos = @{
     'small' = @{
         Nome = 'ggml-small-q5_1.bin'
         Url  = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin'
+        Sha256 = 'ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb'
     }
     'base' = @{
         Nome = 'ggml-base-q5_1.bin'
         Url  = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin'
+        Sha256 = '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898'
     }
     'medium' = @{
         Nome = 'ggml-medium-q5_0.bin'
         Url  = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin'
+        Sha256 = '19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f'
     }
     # large-v3-turbo quantizado: qualidade de large com arquivo de ~570 MB — o teto local.
     'turbo' = @{
         Nome = 'ggml-large-v3-turbo-q5_0.bin'
         Url  = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin'
+        Sha256 = '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2'
     }
 }
 
@@ -54,10 +62,12 @@ $llms = @{
     '4b' = @{
         Nome = 'gemma-3-4b-it-Q4_K_M.gguf'
         Url  = 'https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf'
+        Sha256 = '04a43a22e8d2003deda5acc262f68ec1005fa76c735a9962a8c77042a74a7d19'
     }
     '1b' = @{
         Nome = 'gemma-3-1b-it-Q4_K_M.gguf'
         Url  = 'https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf'
+        Sha256 = '8270790f3ab69fdfe860b7b64008d9a19986d8df7e407bb018184caa08798ebd'
     }
 }
 
@@ -66,11 +76,22 @@ if (-not (Test-Path $Destino)) {
     New-Item -ItemType Directory -Force -Path $Destino | Out-Null
 }
 
-function Get-Modelo($nome, $url) {
+function Test-Integridade($alvo, $sha256) {
+    $hash = (Get-FileHash -Algorithm SHA256 -Path $alvo).Hash
+    return $hash -eq $sha256.ToUpperInvariant()
+}
+
+function Get-Modelo($nome, $url, $sha256) {
     $alvo = Join-Path $Destino $nome
     if (Test-Path $alvo) {
-        Write-Passo "Já existe, pulando: $nome"
-        return
+        Write-Passo "Verificando $nome ..."
+        if (Test-Integridade $alvo $sha256) {
+            Write-Passo "Já existe e está íntegro, pulando: $nome"
+            return
+        }
+        Write-Passo "CORROMPIDO (hash não confere) — apagando e baixando de novo: $nome"
+        Remove-Item $alvo -Force
+        Remove-Item "$alvo.integridade" -Force -ErrorAction SilentlyContinue
     }
     Write-Passo "Baixando $nome ..."
 
@@ -106,9 +127,14 @@ function Get-Modelo($nome, $url) {
         (New-Object Net.WebClient).DownloadFile($url, $temp)
     }
 
+    if (-not (Test-Integridade $temp $sha256)) {
+        # Parcial montado errado pela retomada: apaga para a próxima execução recomeçar do zero.
+        Remove-Item $temp -Force
+        throw "Download de $nome veio corrompido (hash nao confere) - rode o script novamente."
+    }
     Move-Item $temp $alvo -Force
     $mb = [math]::Round((Get-Item $alvo).Length / 1MB, 1)
-    Write-Host "    OK ($mb MB)" -ForegroundColor Green
+    Write-Host "    OK ($mb MB, hash conferido)" -ForegroundColor Green
 }
 
 $ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
@@ -124,7 +150,7 @@ if ($Whisper -eq 'auto') {
 else { $listaWhisper = @($Whisper) }
 foreach ($chave in $listaWhisper) {
     $m = $modelos[$chave]
-    Get-Modelo $m.Nome $m.Url
+    Get-Modelo $m.Nome $m.Url $m.Sha256
 }
 
 if (-not $SemLlm) {
@@ -135,7 +161,7 @@ if (-not $SemLlm) {
     else { $listaLlm = @($Llm) }
     foreach ($chave in $listaLlm) {
         $m = $llms[$chave]
-        Get-Modelo $m.Nome $m.Url
+        Get-Modelo $m.Nome $m.Url $m.Sha256
     }
 }
 else {
@@ -159,7 +185,9 @@ if (-not $SemLimpeza -and $Whisper -eq 'auto' -and ($SemLlm -or $Llm -eq 'auto')
     if (-not $SemLlm) { $desejados += @($listaLlm | ForEach-Object { $llms[$_].Nome }) }
 
     Get-ChildItem $Destino -File | ForEach-Object {
-        $nomeBase = $_.Name -replace '\.baixando$', ''
+        # Parciais (.baixando) e marcadores de verificação (.integridade) seguem o
+        # destino do modelo a que pertencem.
+        $nomeBase = $_.Name -replace '\.baixando$', '' -replace '\.integridade$', ''
         if ($desejados -contains $nomeBase) { return }
         if ($conhecidos -contains $nomeBase) {
             $mb = [math]::Round($_.Length / 1MB, 1)

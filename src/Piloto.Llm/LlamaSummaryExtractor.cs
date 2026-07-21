@@ -86,6 +86,26 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
             return LlmSummary.Vazio();
 
         var caminho = EscolherModelo();
+        LancarSeSentinelaArmada();
+        VerificarIntegridade(caminho);
+
+        // Qualquer caminho daqui até o fim passa por código nativo que pode derrubar o
+        // processo (carga E inferência). A sentinela fica armada durante o trecho todo;
+        // sucesso ou falha gerenciada desarmam no finally — só um crash (que leva o
+        // finally junto com o processo) a deixa no disco, desativando o LLM nesta versão.
+        ArmarSentinela();
+        try
+        {
+            return await ResumirNucleoAsync(caminho, transcript, listas, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            DesarmarSentinela();
+        }
+    }
+
+    private async Task<LlmSummary> ResumirNucleoAsync(string caminho, Transcript transcript, ListasFechadas listas, CancellationToken ct)
+    {
         var (weights, parameters) = ObterWeights(caminho);
         var executor = new StatelessExecutor(weights, parameters);
 
@@ -164,6 +184,105 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
 
         // Nenhum cabe: segue com o menor — GarantirMemoriaParaCarga lança com os números.
         return candidatos[^1];
+    }
+
+    // ------------------------------------------------------------------ integridade
+    /// <summary>SHA256 e tamanho oficiais (lfs.oid do Hugging Face) dos modelos do catálogo.
+    /// O download com retomada (curl -C -) em rede instável pode montar arquivo corrompido,
+    /// e o llama.cpp em cima de GGUF corrompido ABORTA o processo sem exceção .NET — o
+    /// pré-voo converte isso em erro gerenciado ("registro sem resumo") com causa clara.</summary>
+    private static readonly Dictionary<string, (string Sha256, long Tamanho)> HashesOficiais =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["gemma-3-1b-it-Q4_K_M.gguf"] = ("8270790f3ab69fdfe860b7b64008d9a19986d8df7e407bb018184caa08798ebd", 806_058_272),
+            ["gemma-3-4b-it-Q4_K_M.gguf"] = ("04a43a22e8d2003deda5acc262f68ec1005fa76c735a9962a8c77042a74a7d19", 2_489_894_016),
+        };
+
+    /// <summary>Verificação cara (SHA256 de centenas de MB) roda uma vez por arquivo: o
+    /// resultado fica num marcador ao lado do modelo, válido enquanto tamanho+mtime não mudarem.</summary>
+    private void VerificarIntegridade(string caminho)
+    {
+        var nome = Path.GetFileName(caminho);
+        if (!HashesOficiais.TryGetValue(nome, out var oficial))
+            return; // modelo fora do catálogo (colocado manualmente): não bloqueia
+
+        var info = new FileInfo(caminho);
+        if (info.Length != oficial.Tamanho)
+            throw new InvalidOperationException(
+                $"Modelo LLM corrompido/incompleto: {nome} tem {info.Length} bytes, o oficial tem {oficial.Tamanho}. " +
+                "Apague o arquivo e rode \"Baixar modelos\" novamente.");
+
+        var marcador = caminho + ".integridade";
+        var esperado = $"{oficial.Sha256}:{info.Length}:{info.LastWriteTimeUtc.Ticks}";
+        try
+        {
+            if (File.Exists(marcador) && File.ReadAllText(marcador).Trim() == esperado)
+                return; // este exato arquivo já foi verificado
+        }
+        catch { /* marcador ilegível: refaz a verificação */ }
+
+        _log.LogInformation("Verificando integridade do modelo {Nome} (uma vez por arquivo)…", nome);
+        string hash;
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+        using (var stream = File.OpenRead(caminho))
+            hash = Convert.ToHexString(sha.ComputeHash(stream));
+
+        if (!hash.Equals(oficial.Sha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"Modelo LLM corrompido: o SHA256 de {nome} não confere com o oficial. " +
+                "Apague o arquivo e rode \"Baixar modelos\" novamente.");
+
+        try { File.WriteAllText(marcador, esperado); } catch { /* verifica de novo na próxima */ }
+        _log.LogInformation("Modelo {Nome} íntegro (SHA256 confere)", nome);
+    }
+
+    // ------------------------------------------------------------------ sentinela
+    // Se uma carga/inferência do LLM derruba o processo (crash nativo), sem proteção o
+    // ciclo vira queda a cada ligação ou a cada abertura ociosa — visto em campo nas
+    // versões 0.7.8-0.7.10. Sentinela que sobreviveu a um crash = LLM desativado NESTA
+    // versão do app; cada atualização ganha uma chance nova.
+
+    private bool _sentinelaJaLogada;
+
+    private string CaminhoSentinela => Path.Combine(_settings.PastaDadosExpandida, "llm.lock");
+
+    private static string VersaoApp =>
+        typeof(LlamaSummaryExtractor).Assembly.GetName().Version?.ToString(3) ?? "?";
+
+    private void LancarSeSentinelaArmada()
+    {
+        string? versaoSentinela;
+        try
+        {
+            if (!File.Exists(CaminhoSentinela)) return;
+            versaoSentinela = File.ReadAllText(CaminhoSentinela).Trim();
+            if (versaoSentinela != VersaoApp)
+            {
+                File.Delete(CaminhoSentinela); // versão nova: uma nova chance
+                return;
+            }
+        }
+        catch { return; /* sem leitura confiável, não bloqueia */ }
+
+        if (!_sentinelaJaLogada)
+        {
+            _sentinelaJaLogada = true;
+            _log.LogWarning(
+                "LLM desativado nesta versão ({Versao}): a tentativa anterior derrubou o app — reativa na próxima atualização",
+                versaoSentinela);
+        }
+        throw new InvalidOperationException(
+            "Resumo desativado: a tentativa anterior de rodar o LLM encerrou o app inesperadamente. Reativa na próxima atualização.");
+    }
+
+    private void ArmarSentinela()
+    {
+        try { File.WriteAllText(CaminhoSentinela, VersaoApp); } catch { /* melhor tentar o resumo */ }
+    }
+
+    private void DesarmarSentinela()
+    {
+        try { if (File.Exists(CaminhoSentinela)) File.Delete(CaminhoSentinela); } catch { /* fica para a próxima */ }
     }
 
     private (LLamaWeights, ModelParams) ObterWeights(string caminho)
