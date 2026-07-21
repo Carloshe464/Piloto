@@ -35,6 +35,19 @@ public interface ICallRepository
     CallRecord? ObterRegistro(long id);
     IReadOnlyList<CallRecord> ListarRegistros(int limite = 200, int offset = 0);
 
+    /// <summary>
+    /// Substitui o conteúdo do registro (transcrição, campos, resumo, revisão) mantendo
+    /// id, uuid e criado_em — reprocessamento e resumo pendente atualizam em lugar, nunca
+    /// duplicam a ligação. Reindexa a busca (FTS).
+    /// </summary>
+    void AtualizarRegistro(CallRecord registro);
+
+    /// <summary>
+    /// Registros com transcrição não vazia cujo resumo falhou (motivo de revisão contém
+    /// o marcador de erro do LLM) — candidatos da varredura de resumos pendentes.
+    /// </summary>
+    IReadOnlyList<CallRecord> RegistrosComResumoPendente(int limite);
+
     /// <summary>Busca full-text (FTS5) na transcrição e no resumo.</summary>
     IReadOnlyList<CallRecord> Buscar(string termo, int limite = 200);
 

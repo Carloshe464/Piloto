@@ -52,14 +52,16 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
         {
             using var cmd = Conn.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO queue (audio_atendente, audio_cliente, metadata_json, estado, tentativas, criado_em)
-                VALUES ($aa, $ac, $meta, $estado, 0, $criado);
+                INSERT INTO queue (audio_atendente, audio_cliente, metadata_json, estado, tentativas, criado_em, registro_id)
+                VALUES ($aa, $ac, $meta, $estado, 0, $criado, $reg);
                 """;
             cmd.Parameters.AddWithValue("$aa", item.CaminhoAudioAtendente);
             cmd.Parameters.AddWithValue("$ac", item.CaminhoAudioCliente);
             cmd.Parameters.AddWithValue("$meta", (object?)item.MetadataJson ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$estado", (int)item.Estado);
             cmd.Parameters.AddWithValue("$criado", Iso(item.CriadoEm));
+            // Reprocessamento: item já nasce apontando para o registro que vai atualizar.
+            cmd.Parameters.AddWithValue("$reg", (object?)item.RegistroId ?? DBNull.Value);
             cmd.ExecuteNonQuery();
 
             var id = UltimoId(null);
@@ -225,6 +227,99 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
             tx.Commit();
             r.Id = id;
             return id;
+        }
+    }
+
+    public void AtualizarRegistro(CallRecord r)
+    {
+        lock (_lock)
+        {
+            using var tx = Conn.BeginTransaction();
+            using (var cmd = Conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                // uuid e criado_em ficam intactos: é a mesma ligação, com conteúdo novo.
+                cmd.CommandText = """
+                    UPDATE calls SET
+                        numero=$numero, ticket=$ticket, status_zendesk=$statusz, atendente=$atendente,
+                        iniciada_em=$ini, encerrada_em=$fim,
+                        duracao_seg=$dur, tempo_falado_seg=$falado,
+                        audio_atendente=$aa, audio_cliente=$ac,
+                        transcript_json=$tjson, transcript_texto=$ttexto, campos_json=$cjson,
+                        resumo_json=$rjson, resumo_texto=$rtexto,
+                        motivo=$motivo, produto=$produto, status_resumo=$statusr,
+                        precisa_revisao=$revisao, motivos_revisao_json=$motivosrev
+                    WHERE id=$id;
+                    """;
+                cmd.Parameters.AddWithValue("$id", r.Id);
+                cmd.Parameters.AddWithValue("$numero", (object?)r.Metadata.Numero ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$ticket", (object?)r.Metadata.TicketId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$statusz", (object?)r.Metadata.Status ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$atendente", (object?)r.Metadata.Atendente ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$ini", (object?)(r.Metadata.IniciadaEm is { } i ? Iso(i) : null) ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$fim", (object?)(r.Metadata.EncerradaEm is { } f ? Iso(f) : null) ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$dur", r.Duracao.TotalSeconds);
+                cmd.Parameters.AddWithValue("$falado", r.TempoFalado.TotalSeconds);
+                cmd.Parameters.AddWithValue("$aa", (object?)r.CaminhoAudioAtendente ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$ac", (object?)r.CaminhoAudioCliente ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$tjson", CallSerialization.SerializarTranscript(r.Transcript));
+                cmd.Parameters.AddWithValue("$ttexto", r.Transcript.TextoRotulado());
+                cmd.Parameters.AddWithValue("$cjson", CallSerialization.Serializar(r.Campos));
+                cmd.Parameters.AddWithValue("$rjson", CallSerialization.Serializar(r.Resumo));
+                cmd.Parameters.AddWithValue("$rtexto", ResumoParaTexto(r));
+                cmd.Parameters.AddWithValue("$motivo", (object?)r.Resumo.MotivoContato ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$produto", (object?)r.Resumo.Produto ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$statusr", (object?)r.Resumo.Status ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$revisao", r.PrecisaRevisao ? 1 : 0);
+                cmd.Parameters.AddWithValue("$motivosrev", CallSerialization.Serializar(r.MotivosRevisao));
+                cmd.ExecuteNonQuery();
+            }
+
+            using (var del = Conn.CreateCommand())
+            {
+                del.Transaction = tx;
+                del.CommandText = "DELETE FROM calls_fts WHERE rowid=$id;";
+                del.Parameters.AddWithValue("$id", r.Id);
+                del.ExecuteNonQuery();
+            }
+            using (var fts = Conn.CreateCommand())
+            {
+                fts.Transaction = tx;
+                fts.CommandText = """
+                    INSERT INTO calls_fts (rowid, transcript_texto, resumo_texto, numero, ticket)
+                    VALUES ($id, $ttexto, $rtexto, $numero, $ticket);
+                    """;
+                fts.Parameters.AddWithValue("$id", r.Id);
+                fts.Parameters.AddWithValue("$ttexto", r.Transcript.TextoRotulado());
+                fts.Parameters.AddWithValue("$rtexto", ResumoParaTexto(r));
+                fts.Parameters.AddWithValue("$numero", (object?)r.Metadata.Numero ?? DBNull.Value);
+                fts.Parameters.AddWithValue("$ticket", (object?)r.Metadata.TicketId ?? DBNull.Value);
+                fts.ExecuteNonQuery();
+            }
+
+            tx.Commit();
+        }
+    }
+
+    public IReadOnlyList<CallRecord> RegistrosComResumoPendente(int limite)
+    {
+        lock (_lock)
+        {
+            using var cmd = Conn.CreateCommand();
+            // O marcador é ASCII puro (ver TranscriptionPipeline.MarcadorErroLlm): o JSON
+            // no banco escapa acentos, então só um marcador sem acento casa no LIKE.
+            cmd.CommandText = SelectCalls + """
+                 WHERE precisa_revisao = 1
+                   AND motivos_revisao_json LIKE $marca
+                   AND transcript_texto <> ''
+                 ORDER BY id ASC LIMIT $lim;
+                """;
+            cmd.Parameters.AddWithValue("$marca", $"%{Core.Pipeline.TranscriptionPipeline.MarcadorErroLlm}%");
+            cmd.Parameters.AddWithValue("$lim", limite);
+            using var r = cmd.ExecuteReader();
+            var lista = new List<CallRecord>();
+            while (r.Read()) lista.Add(LerCallRecord(r));
+            return lista;
         }
     }
 

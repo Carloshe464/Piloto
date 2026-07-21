@@ -12,11 +12,13 @@ public partial class DetailWindow : Window
 {
     private readonly CallRecord _registro;
     private readonly IExporter _exporter;
+    private readonly Core.Services.CallEnqueuer _enqueuer;
 
-    public DetailWindow(CallRecord registro, IExporter exporter)
+    public DetailWindow(CallRecord registro, IExporter exporter, Core.Services.CallEnqueuer enqueuer)
     {
         _registro = registro;
         _exporter = exporter;
+        _enqueuer = enqueuer;
         InitializeComponent();
         Preencher();
     }
@@ -118,6 +120,43 @@ public partial class DetailWindow : Window
             BtnCopiarDialogo.Content = "Copiado ✓";
         }
         catch { /* clipboard ocupado por outro app — ignora */ }
+    }
+
+    /// <summary>
+    /// Reenfileira a ligação a partir dos WAVs originais (retidos por 30 dias): o novo
+    /// resultado SUBSTITUI transcrição, campos e resumo deste registro. Uso típico da fase
+    /// piloto: retestar após atualização do app ou com a máquina folgada (modelo maior).
+    /// </summary>
+    private void Reprocessar_Click(object sender, RoutedEventArgs e)
+    {
+        var temAudio =
+            (!string.IsNullOrWhiteSpace(_registro.CaminhoAudioAtendente) && File.Exists(_registro.CaminhoAudioAtendente)) ||
+            (!string.IsNullOrWhiteSpace(_registro.CaminhoAudioCliente) && File.Exists(_registro.CaminhoAudioCliente));
+        if (!temAudio)
+        {
+            MessageBox.Show("O áudio desta ligação não está mais no disco (retenção) — não dá para reprocessar.",
+                "Piloto", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var resposta = MessageBox.Show(
+            "Reprocessar esta ligação a partir do áudio?\n\n" +
+            "A transcrição, os campos e o resumo atuais serão substituídos pelo novo resultado.",
+            "Piloto", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (resposta != MessageBoxResult.Yes) return;
+
+        try
+        {
+            _enqueuer.Reprocessar(_registro);
+            MessageBox.Show("Ligação reenfileirada — será reprocessada em segundo plano.",
+                "Piloto", MessageBoxButton.OK, MessageBoxImage.Information);
+            Close();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Falha ao reenfileirar:\n\n" + ex.Message,
+                "Piloto", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void Fechar_Click(object sender, RoutedEventArgs e) => Close();

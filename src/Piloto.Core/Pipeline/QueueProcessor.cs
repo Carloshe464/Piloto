@@ -93,8 +93,13 @@ public sealed class QueueProcessor : IAsyncDisposable
                 var item = _repo.ProximoPendente();
                 if (item is null)
                 {
-                    DescarregarSeOcioso();
-                    await EsperarAsync(ct).ConfigureAwait(false);
+                    // Fila vazia é a janela para completar resumos que falharam por falta
+                    // de memória no pico: os registros "se curam" quando a máquina folga.
+                    if (!await TentarResumoPendenteAsync(ct).ConfigureAwait(false))
+                    {
+                        DescarregarSeOcioso();
+                        await EsperarAsync(ct).ConfigureAwait(false);
+                    }
                     continue;
                 }
 
@@ -122,11 +127,27 @@ public sealed class QueueProcessor : IAsyncDisposable
         {
             var captura = ReconstruirCaptura(item);
             var registro = await _pipeline.ProcessarAsync(captura, ct).ConfigureAwait(false);
-            var id = _repo.SalvarRegistro(registro);
-            registro.Id = id;
+
+            if (item.RegistroId is long idExistente)
+            {
+                // Reprocessamento pedido pela UI: substitui o conteúdo do registro
+                // original — id/uuid/criado_em estáveis, ligação nunca duplicada.
+                var original = _repo.ObterRegistro(idExistente);
+                registro.Id = idExistente;
+                if (original is not null)
+                {
+                    registro.Uuid = original.Uuid;
+                    registro.CriadoEm = original.CriadoEm;
+                }
+                _repo.AtualizarRegistro(registro);
+            }
+            else
+            {
+                registro.Id = _repo.SalvarRegistro(registro);
+            }
 
             item.Estado = QueueState.Concluido;
-            item.RegistroId = id;
+            item.RegistroId = registro.Id;
             item.AtualizadoEm = DateTimeOffset.Now;
             _repo.AtualizarItem(item);
 
@@ -153,6 +174,54 @@ public sealed class QueueProcessor : IAsyncDisposable
             // Evidência para calibrar consumo em produção (memória de pico vs. de posse).
             _log.LogInformation("Memória do processo após o item {Id}: {Mb} MB",
                 item.Id, Environment.WorkingSet / 1_048_576);
+        }
+    }
+
+    /// <summary>Entre varreduras frustradas (nada pendente, ou memória ainda curta) não
+    /// adianta reconsultar a cada tique de 3 s — o quadro só muda em minutos.</summary>
+    private static readonly TimeSpan IntervaloVarreduraResumos = TimeSpan.FromMinutes(10);
+    private DateTimeOffset _proximaVarreduraResumos = DateTimeOffset.MinValue;
+
+    /// <summary>
+    /// Completa UM resumo pendente por vez (registros cujo LLM falhou na hora, mas cuja
+    /// transcrição está salva). Devolve true quando concluiu um — o loop tenta o próximo
+    /// imediatamente, aproveitando o modelo já carregado.
+    /// </summary>
+    private async Task<bool> TentarResumoPendenteAsync(CancellationToken ct)
+    {
+        if (DateTimeOffset.Now < _proximaVarreduraResumos) return false;
+
+        CallRecord? registro = null;
+        try { registro = _repo.RegistrosComResumoPendente(1).FirstOrDefault(); }
+        catch (Exception ex) { _log.LogError(ex, "Falha ao buscar resumos pendentes"); }
+
+        if (registro is null)
+        {
+            _proximaVarreduraResumos = DateTimeOffset.Now + IntervaloVarreduraResumos;
+            return false;
+        }
+
+        try
+        {
+            if (!await _pipeline.TentarResumoPendenteAsync(registro, ct).ConfigureAwait(false))
+            {
+                // Sem LLM ou sem memória neste momento — o quadro muda, tenta mais tarde.
+                _proximaVarreduraResumos = DateTimeOffset.Now + IntervaloVarreduraResumos;
+                return false;
+            }
+
+            _repo.AtualizarRegistro(registro);
+            RegistroProcessado?.Invoke(this, registro);
+            _ultimaAtividade = DateTimeOffset.Now;
+            _modelosDescarregados = false;
+            return true;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Falha ao completar resumo pendente do registro {Id}", registro.Id);
+            _proximaVarreduraResumos = DateTimeOffset.Now + IntervaloVarreduraResumos;
+            return false;
         }
     }
 

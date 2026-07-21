@@ -41,6 +41,11 @@ public sealed class TranscriptionPipeline
         _log = log;
     }
 
+    /// <summary>Marcador presente no motivo de revisão quando o resumo falhou — é por ele
+    /// que a varredura de resumos pendentes encontra o que completar. ASCII puro de
+    /// propósito: o JSON no banco escapa acentos (á...), e o LIKE do SQL precisa casar.</summary>
+    public const string MarcadorErroLlm = "erro no LLM";
+
     /// <summary>
     /// Descarrega Whisper e LLM da memória (recarregados na próxima ligação). Devolve true
     /// se algo estava carregado. Chamado pela fila após ociosidade: o Piloto usa memória de
@@ -116,7 +121,7 @@ public sealed class TranscriptionPipeline
         };
 
         if (erroLlm is not null)
-            registro.MarcarRevisao($"Resumo automático indisponível — erro no LLM: {erroLlm}");
+            registro.MarcarRevisao($"Resumo automático indisponível — {MarcadorErroLlm}: {erroLlm}");
 
         // Uma ligação real sem NENHUMA fala reconhecível é falha (captura ou transcrição),
         // nunca um registro "válido" de aparência normal.
@@ -135,6 +140,42 @@ public sealed class TranscriptionPipeline
             _log.LogWarning("Registro marcado para revisão: {Motivos}", string.Join(" | ", registro.MotivosRevisao));
 
         return registro;
+    }
+
+    /// <summary>
+    /// Reexecuta apenas as camadas 2 (LLM) e 3 (grounding) sobre um registro já transcrito
+    /// cujo resumo falhou — a transcrição salva no banco é a entrada, o áudio não é tocado.
+    /// Devolve true quando o resumo foi gerado e aplicado ao registro (o chamador persiste);
+    /// false quando as condições ainda não permitem (LLM ausente, sem memória agora) — o
+    /// registro fica como está e a retentativa acontece mais tarde.
+    /// </summary>
+    public async Task<bool> TentarResumoPendenteAsync(CallRecord registro, CancellationToken ct = default)
+    {
+        if (!_settings.Llm.Habilitado || !_modelos.LlmDisponivel) return false;
+        if (registro.Transcript.EstaVazio) return false;
+
+        var listas = _listasProvider();
+        if (!MemoriaComportaLlmSemLiberarWhisper())
+            _transcriber.LiberarModelo();
+
+        LlmSummary resumo;
+        try
+        {
+            resumo = await _llm.ResumirAsync(registro.Transcript, listas, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _log.LogInformation("Resumo pendente adiado (registro {Id}): {Erro}", registro.Id, ex.Message);
+            return false;
+        }
+
+        registro.Resumo = resumo;
+        registro.MotivosRevisao.RemoveAll(m => m.Contains(MarcadorErroLlm, StringComparison.Ordinal));
+        registro.PrecisaRevisao = registro.MotivosRevisao.Count > 0;
+        _grounding.Aplicar(registro, listas);
+        _log.LogInformation("Resumo pendente concluído para o registro {Id}", registro.Id);
+        return true;
     }
 
     /// <summary>

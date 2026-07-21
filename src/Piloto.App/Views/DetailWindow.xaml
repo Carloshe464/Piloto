@@ -211,6 +211,8 @@
             <Button Content="Exportar TXT" Click="ExportarTxt_Click" />
             <Button Content="Exportar JSON" Click="ExportarJson_Click" />
             <Button Content="Exportar CSV" Click="ExportarCsv_Click" />
+            <Button Content="↻ Reprocessar do áudio" Click="Reprocessar_Click"
+                    ToolTip="Transcreve e resume novamente a partir dos WAVs originais; o resultado substitui este registro" />
             <Button Content="Fechar" Click="Fechar_Click" Style="{StaticResource BotaoPrimario}"
                     DockPanel.Dock="Right" HorizontalAlignment="Right" Margin="0" MinWidth="100" />
         </DockPanel>
