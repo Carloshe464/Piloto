@@ -30,6 +30,32 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
     private ModelParams? _parameters;
     private string? _caminhoCarregado;
 
+    /// <summary>
+    /// Trava a seleção do binário nativo ANTES de qualquer chamada ao llama.cpp.
+    /// Em campo, o seletor automático escolheu o build AVX512 ("Successfully loaded
+    /// .../avx512/llama.dll" era a última linha do log) e o processo morreu na carga do
+    /// modelo três vezes seguidas COM 2,4 GB livres — assinatura de instrução ilegal:
+    /// CPUs antigas passam no teste de AVX512F mas não implementam todas as extensões
+    /// que o build usa, e a instrução ilegal mata o processo sem exceção .NET.
+    /// AVX2 é universal nas máquinas da operação e, com 4 threads, a diferença de
+    /// velocidade é pequena. CUDA/Vulkan desligados: rodamos com GpuLayerCount=0,
+    /// sondar GPU inexistente é só mais um jeito de quebrar.
+    /// </summary>
+    static LlamaSummaryExtractor()
+    {
+        try
+        {
+            NativeLibraryConfig.All
+                .WithCuda(false)
+                .WithVulkan(false)
+                .WithAvx(AvxLevel.Avx2);
+        }
+        catch
+        {
+            // Lib nativa já carregada (ordem inesperada): segue com a seleção default.
+        }
+    }
+
     public LlamaSummaryExtractor(
         AppSettings settings,
         IModelCatalog modelos,
