@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Piloto.LlmWorker</RootNamespace>
+    <AssemblyName>Piloto.LlmWorker</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Mesmas versões do Piloto.Llm: 0.25.0 é a mais recente com Gemma 3 e
+         Microsoft.Extensions 9.x. Sem referência a projetos do Piloto de propósito:
+         o worker é um executor burro — tudo o que ele precisa chega no request JSON. -->
+    <PackageReference Include="LLamaSharp" Version="0.25.0" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.25.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.8" />
+  </ItemGroup>
+
+</Project>

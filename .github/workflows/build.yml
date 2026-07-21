@@ -39,6 +39,15 @@ jobs:
           --self-contained true -p:PublishSingleFile=false
           -o publish/
 
+      # O worker vai para a MESMA pasta: Piloto.LlmWorker.exe fica ao lado do Piloto.exe
+      # (é onde o app o procura) e compartilha o runtime e os nativos do LLamaSharp já
+      # publicados — mesmas versões de pacote, arquivos idênticos.
+      - name: Publish LLM worker (processo isolado)
+        run: >
+          dotnet publish src/Piloto.LlmWorker -c Release -r win-x64
+          --self-contained true -p:PublishSingleFile=false
+          -o publish/
+
       - name: Instalador (Inno Setup)
         run: |
           choco install innosetup -y --no-progress
