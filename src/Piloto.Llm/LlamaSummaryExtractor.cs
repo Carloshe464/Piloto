@@ -30,29 +30,41 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
     private ModelParams? _parameters;
     private string? _caminhoCarregado;
 
+    /// <summary>Nível de instruções escolhido para o llama.cpp — vai para o log na carga,
+    /// para o diagnóstico de campo não depender de suposição sobre a CPU.</summary>
+    private static readonly string NivelAvx;
+
     /// <summary>
-    /// Trava a seleção do binário nativo ANTES de qualquer chamada ao llama.cpp.
-    /// Em campo, o seletor automático escolheu o build AVX512 ("Successfully loaded
-    /// .../avx512/llama.dll" era a última linha do log) e o processo morreu na carga do
-    /// modelo três vezes seguidas COM 2,4 GB livres — assinatura de instrução ilegal:
-    /// CPUs antigas passam no teste de AVX512F mas não implementam todas as extensões
-    /// que o build usa, e a instrução ilegal mata o processo sem exceção .NET.
-    /// AVX2 é universal nas máquinas da operação e, com 4 threads, a diferença de
-    /// velocidade é pequena. CUDA/Vulkan desligados: rodamos com GpuLayerCount=0,
-    /// sondar GPU inexistente é só mais um jeito de quebrar.
+    /// Trava a seleção do binário nativo ANTES de qualquer chamada ao llama.cpp, no nível
+    /// que a CPU executa DE VERDADE. O seletor do LLamaSharp segue a preferência
+    /// configurada sem testar a CPU: em campo, tanto o build avx512 (default) quanto o
+    /// avx2 (fixado na 0.7.7) morreram com instrução ilegal na primeira execução de
+    /// código vetorizado — as máquinas da operação são antigas e não têm nem AVX2.
+    /// Quem sabe o que a CPU suporta é o runtime do .NET (Avx2/Avx.IsSupported).
+    /// CUDA/Vulkan desligados: rodamos com GpuLayerCount=0, sondar GPU inexistente é
+    /// só mais um jeito de quebrar. Sem AVX o 1B fica mais lento, mas vivo.
     /// </summary>
     static LlamaSummaryExtractor()
     {
+        var nivel = AvxLevel.None;
+        try
+        {
+            if (System.Runtime.Intrinsics.X86.Avx2.IsSupported) nivel = AvxLevel.Avx2;
+            else if (System.Runtime.Intrinsics.X86.Avx.IsSupported) nivel = AvxLevel.Avx;
+        }
+        catch { /* sem intrinsics x86 (plataforma exótica): fica no None, que roda em tudo */ }
+        NivelAvx = nivel.ToString();
+
         try
         {
             NativeLibraryConfig.All
                 .WithCuda(false)
                 .WithVulkan(false)
-                .WithAvx(AvxLevel.Avx2);
+                .WithAvx(nivel);
         }
         catch
         {
-            // Lib nativa já carregada (ordem inesperada): segue com a seleção default.
+            // Lib nativa já carregada (ordem inesperada): segue com a seleção anterior.
         }
     }
 
@@ -164,7 +176,8 @@ public sealed class LlamaSummaryExtractor : ILlmExtractor, IDisposable
             _weights?.Dispose();
             ConfigurarLogNativo();
             GarantirMemoriaParaCarga(caminho);
-            _log.LogInformation("Carregando modelo LLM: {Modelo}", Path.GetFileName(caminho));
+            _log.LogInformation("Carregando modelo LLM: {Modelo} (instruções: {Avx})",
+                Path.GetFileName(caminho), NivelAvx);
 
             var parameters = new ModelParams(caminho)
             {

@@ -153,6 +153,7 @@ public sealed class TranscriptionPipeline
     {
         if (!_settings.Llm.Habilitado || !_modelos.LlmDisponivel) return false;
         if (registro.Transcript.EstaVazio) return false;
+        if (SentinelaBloqueiaVarredura()) return false;
 
         var listas = _listasProvider();
         if (!MemoriaComportaLlmSemLiberarWhisper())
@@ -161,6 +162,7 @@ public sealed class TranscriptionPipeline
         LlmSummary resumo;
         try
         {
+            ArmarSentinela();
             resumo = await _llm.ResumirAsync(registro.Transcript, listas, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { throw; }
@@ -169,6 +171,12 @@ public sealed class TranscriptionPipeline
             _log.LogInformation("Resumo pendente adiado (registro {Id}): {Erro}", registro.Id, ex.Message);
             return false;
         }
+        finally
+        {
+            // Sucesso ou falha GERENCIADA desarmam; só um crash do processo (que leva o
+            // finally junto) deixa a sentinela no disco — e ela desativa a varredura.
+            DesarmarSentinela();
+        }
 
         registro.Resumo = resumo;
         registro.MotivosRevisao.RemoveAll(m => m.Contains(MarcadorErroLlm, StringComparison.Ordinal));
@@ -176,6 +184,60 @@ public sealed class TranscriptionPipeline
         _grounding.Aplicar(registro, listas);
         _log.LogInformation("Resumo pendente concluído para o registro {Id}", registro.Id);
         return true;
+    }
+
+    // ------------------------------------------------------------------ sentinela
+    // A varredura de resumos pendentes carrega o LLM com o app ocioso. Se essa carga
+    // derruba o processo (crash nativo: instrução ilegal, OOM), SEM proteção o ciclo
+    // vira queda a cada abertura do app — foi o que aconteceu em campo na 0.7.8/0.7.9.
+    // A sentinela é criada antes de cada tentativa e removida no fim (sucesso ou falha
+    // gerenciada); se existir na próxima tentativa, a anterior matou o processo — a
+    // varredura fica desarmada NESTA versão do app. Cada atualização ganha uma chance
+    // nova (a correção pode ter chegado), rearmando o bloqueio se cair de novo.
+
+    private bool _sentinelaJaLogada;
+
+    private string CaminhoSentinela => Path.Combine(_settings.PastaDadosExpandida, "resumo-pendente.lock");
+
+    private static string VersaoApp =>
+        typeof(TranscriptionPipeline).Assembly.GetName().Version?.ToString(3) ?? "?";
+
+    private bool SentinelaBloqueiaVarredura()
+    {
+        try
+        {
+            if (!File.Exists(CaminhoSentinela)) return false;
+
+            var versaoSentinela = File.ReadAllText(CaminhoSentinela).Trim();
+            if (versaoSentinela != VersaoApp)
+            {
+                File.Delete(CaminhoSentinela); // versão nova: uma nova chance
+                return false;
+            }
+
+            if (!_sentinelaJaLogada)
+            {
+                _sentinelaJaLogada = true;
+                _log.LogWarning(
+                    "Varredura de resumos pendentes desarmada: a tentativa anterior derrubou o app nesta versão ({Versao}) — reativa na próxima atualização",
+                    versaoSentinela);
+            }
+            return true;
+        }
+        catch
+        {
+            return false; // sem leitura confiável, não bloqueia
+        }
+    }
+
+    private void ArmarSentinela()
+    {
+        try { File.WriteAllText(CaminhoSentinela, VersaoApp); } catch { /* melhor tentar o resumo */ }
+    }
+
+    private void DesarmarSentinela()
+    {
+        try { if (File.Exists(CaminhoSentinela)) File.Delete(CaminhoSentinela); } catch { /* fica para a próxima */ }
     }
 
     /// <summary>
