@@ -47,6 +47,12 @@ public partial class App : Application
             _provider = CompositionRoot.Build(_config);
             _log = _provider.GetRequiredService<ILogger<App>>();
 
+            // Primeira linha de cada sessão: sem ela não dá para saber pelo log qual
+            // versão rodou — já perdemos diagnóstico de campo comparando log de versão
+            // velha achando que era a nova.
+            _log.LogInformation("Piloto {Versao} iniciado",
+                typeof(App).Assembly.GetName().Version?.ToString(3) ?? "?");
+
             var repo = _provider.GetRequiredService<ICallRepository>();
             repo.Inicializar();
 
