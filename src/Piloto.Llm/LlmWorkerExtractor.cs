@@ -191,6 +191,11 @@ public sealed class LlmWorkerExtractor : ILlmExtractor
             processo.StartInfo.ArgumentList.Add(caminhoRequest);
             processo.StartInfo.ArgumentList.Add(caminhoResponse);
 
+            // PATH mínimo: o worker (self-contained) não precisa de nada dali, e uma DLL
+            // nativa estranha de outro programa no PATH da máquina é a suspeita viva do
+            // AV em llama_backend_init() — dupla proteção com a blindagem interna do worker.
+            processo.StartInfo.Environment["PATH"] = Environment.GetFolderPath(Environment.SpecialFolder.System);
+
             // Últimas linhas do stderr (log nativo do llama.cpp): em crash, apontam ONDE
             // a carga/inferência morreu — o rastro que cinco versões de hipóteses não tinham.
             var stderr = new Queue<string>();

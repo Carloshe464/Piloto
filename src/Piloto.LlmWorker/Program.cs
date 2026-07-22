@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using LLama;
@@ -132,6 +133,7 @@ internal static class Program
             catch { /* sem intrinsics x86: None roda em tudo */ }
         }
         Console.Error.WriteLine($"[worker] instruções: {nivel}{(avxForcado is null or "auto" ? "" : " (forçado)")}");
+        BlindarBuscaDeDlls(nivel);
 
         try
         {
@@ -145,6 +147,48 @@ internal static class Program
         try { NativeLogConfig.llama_log_set(new StderrLogger()); }
         catch { /* sem log nativo: o exit code continua sendo o diagnóstico principal */ }
     }
+
+    /// <summary>
+    /// Restringe a resolução de dependências nativas (as ggml*.dll que o llama.dll puxa)
+    /// à pasta da variante escolhida + pasta do app + System32 — CWD e PATH ficam FORA.
+    /// Motivo: o AV 0xC0000005 de campo acontece em llama_backend_init(), a primeira
+    /// chamada nativa, antes de modelo/gramática/inferência — assinatura clássica de
+    /// ABI errada, e uma ggml.dll de OUTRO programa no PATH da máquina produziria
+    /// exatamente isso (e explicaria por que só uma máquina cai).
+    /// </summary>
+    private static void BlindarBuscaDeDlls(AvxLevel nivel)
+    {
+        try
+        {
+            var variante = nivel switch
+            {
+                AvxLevel.Avx512 => "avx512",
+                AvxLevel.Avx2 => "avx2",
+                AvxLevel.Avx => "avx",
+                _ => "noavx",
+            };
+            var dir = Path.Combine(AppContext.BaseDirectory, "runtimes", "win-x64", "native", variante);
+
+            if (!SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS))
+                return;
+            // Só a variante que VAI carregar: registrar todas misturaria ABIs entre pastas.
+            if (Directory.Exists(dir))
+                AddDllDirectory(dir);
+            Console.Error.WriteLine($"[worker] busca de DLLs restrita: app + {variante} + System32 (PATH/CWD fora)");
+        }
+        catch
+        {
+            // API ausente ou bloqueada: segue com a busca padrão do Windows.
+        }
+    }
+
+    private const uint LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000;
+
+    [DllImport("kernel32", SetLastError = true)]
+    private static extern bool SetDefaultDllDirectories(uint flags);
+
+    [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr AddDllDirectory(string path);
 
     /// <summary>Encaminha o log nativo do llama.cpp para o stderr, que o app captura e
     /// guarda as últimas linhas — o rastro que faltava nos crashes de carga.</summary>
