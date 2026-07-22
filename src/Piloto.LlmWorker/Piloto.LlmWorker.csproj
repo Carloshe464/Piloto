@@ -16,7 +16,7 @@
          já estão em runtimes\win-x64\native\ na pasta do app (publicados com o
          Piloto.exe) — o worker roda dessa pasta e o LLamaSharp os acha por lá. -->
     <PackageReference Include="LLamaSharp" Version="0.27.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
   </ItemGroup>
 
 </Project>
