@@ -92,7 +92,60 @@ public sealed class LlmWorkerExtractor : ILlmExtractor
 
     private sealed record Resposta(string? Saida, string? Erro);
 
+    /// <summary>Crash NATIVO do worker (exit code de exceção do Windows) — o único tipo de
+    /// falha que justifica tentar de novo com outra configuração.</summary>
+    private sealed class CrashNativoException : Exception
+    {
+        public CrashNativoException(string mensagem) : base(mensagem) { }
+    }
+
+    /// <summary>Uma configuração de tentativa da escada de fallback.</summary>
+    private sealed record Tentativa(string Descricao, bool Gramatica, string? Avx, int Contexto);
+
+    /// <summary>
+    /// Escada de fallback contra o crash nativo (0xC0000005 consistente em campo): cada
+    /// degrau remove uma suspeita — primeiro a gramática GBNF, depois as instruções
+    /// AVX + contexto grande. Se um degrau funciona, o log diz QUAL, e isso é a evidência
+    /// que aponta a causa raiz; se todos caem, conta UMA queda da sessão (3 suspendem).
+    /// </summary>
     private async Task<string> ExecutarWorkerAsync(string caminhoModelo, Transcript transcript, ListasFechadas listas, CancellationToken ct)
+    {
+        var contexto = _settings.Llm.Contexto;
+        var tentativas = new List<Tentativa>
+        {
+            new("configuração normal", _settings.Llm.Gramatica, Avx: null, contexto),
+        };
+        if (_settings.Llm.Gramatica)
+            tentativas.Add(new("sem gramática GBNF", Gramatica: false, Avx: null, contexto));
+        tentativas.Add(new("sem gramática, sem AVX, contexto 2048", Gramatica: false, Avx: "none", Math.Min(contexto, 2048)));
+
+        CrashNativoException? ultimoCrash = null;
+        foreach (var tentativa in tentativas)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var saida = await TentarWorkerAsync(caminhoModelo, transcript, listas, tentativa, ct).ConfigureAwait(false);
+                if (ultimoCrash is not null)
+                    _log.LogWarning(
+                        "Resumo obtido no fallback \"{Descricao}\" — o crash nativo está no que a configuração anterior tinha a mais (evidência de causa raiz)",
+                        tentativa.Descricao);
+                _quedasConsecutivas = 0;
+                return saida;
+            }
+            catch (CrashNativoException ex)
+            {
+                ultimoCrash = ex;
+            }
+        }
+
+        _quedasConsecutivas++;
+        _log.LogError("Todas as {N} tentativas do worker caíram — queda {Queda}/{Max} da sessão",
+            tentativas.Count, _quedasConsecutivas, MaxQuedasConsecutivas);
+        throw new InvalidOperationException(ultimoCrash!.Message);
+    }
+
+    private async Task<string> TentarWorkerAsync(string caminhoModelo, Transcript transcript, ListasFechadas listas, Tentativa tentativa, CancellationToken ct)
     {
         var exe = Path.Combine(AppContext.BaseDirectory, "Piloto.LlmWorker.exe");
         if (!File.Exists(exe))
@@ -109,18 +162,20 @@ public sealed class LlmWorkerExtractor : ILlmExtractor
         {
             modelo = caminhoModelo,
             prompt = _prompt.Construir(transcript, listas),
-            gbnf = _settings.Llm.Gramatica ? GbnfGrammarBuilder.Construir(listas) : null,
+            gbnf = tentativa.Gramatica ? GbnfGrammarBuilder.Construir(listas) : null,
             temperatura = _settings.Llm.Temperatura,
-            contexto = _settings.Llm.Contexto,
+            contexto = tentativa.Contexto,
             threads = Hardware.ResolverThreads(_settings.Llm.Threads),
             maxTokens = 700,
+            avx = tentativa.Avx,
         };
 
         try
         {
             File.WriteAllText(caminhoRequest, JsonSerializer.Serialize(request, JsonOpts));
 
-            _log.LogInformation("Worker do LLM iniciado: {Modelo}", Path.GetFileName(caminhoModelo));
+            _log.LogInformation("Worker do LLM iniciado: {Modelo} ({Descricao})",
+                Path.GetFileName(caminhoModelo), tentativa.Descricao);
             var inicio = DateTimeOffset.Now;
 
             using var processo = new Process();
@@ -145,7 +200,9 @@ public sealed class LlmWorkerExtractor : ILlmExtractor
                 lock (stderr)
                 {
                     stderr.Enqueue(e.Data);
-                    while (stderr.Count > 40) stderr.Dequeue();
+                    // 160 linhas seguram o log de carga verboso do llama.cpp sem expulsar
+                    // os breadcrumbs [worker] do início, que dizem até onde o processo chegou.
+                    while (stderr.Count > 160) stderr.Dequeue();
                 }
             };
 
@@ -170,7 +227,6 @@ public sealed class LlmWorkerExtractor : ILlmExtractor
             var duracao = DateTimeOffset.Now - inicio;
             if (processo.ExitCode == 0)
             {
-                _quedasConsecutivas = 0;
                 var resposta = JsonSerializer.Deserialize<Resposta>(File.ReadAllText(caminhoResponse), JsonOpts);
                 _log.LogInformation("Worker do LLM concluído em {Segundos:0} s", duracao.TotalSeconds);
                 return resposta?.Saida ?? "";
@@ -190,15 +246,19 @@ public sealed class LlmWorkerExtractor : ILlmExtractor
             }
 
             // Crash NATIVO — o que derrubava o app inteiro até a 0.7.11. Agora é um número
-            // no log e um registro sem resumo.
-            _quedasConsecutivas++;
-            string ultimasLinhas;
-            lock (stderr) ultimasLinhas = string.Join(" | ", stderr.TakeLast(6));
+            // no log, um degrau da escada de fallback e, no pior caso, um registro sem resumo.
+            // O stderr completo importa: os breadcrumbs [worker]/[llama] do INÍCIO dizem até
+            // onde chegou (instruções, carga, inferência) antes do stack de crash do fim.
+            string linhas;
+            lock (stderr)
+                linhas = stderr.Count <= 30
+                    ? string.Join(" | ", stderr)
+                    : string.Join(" | ", stderr.Take(12)) + " | (…) | " + string.Join(" | ", stderr.TakeLast(18));
             _log.LogError(
-                "Worker do LLM MORREU com exit code 0x{Codigo:X8} ({Traducao}) após {Segundos:0} s — queda {N}/{Max}. Últimas linhas: {Stderr}",
+                "Worker do LLM MORREU com exit code 0x{Codigo:X8} ({Traducao}) após {Segundos:0} s na tentativa \"{Descricao}\". Stderr: {Stderr}",
                 unchecked((uint)processo.ExitCode), TraduzirExitCode(processo.ExitCode),
-                duracao.TotalSeconds, _quedasConsecutivas, MaxQuedasConsecutivas, ultimasLinhas);
-            throw new InvalidOperationException(
+                duracao.TotalSeconds, tentativa.Descricao, linhas);
+            throw new CrashNativoException(
                 $"O processo do LLM encerrou inesperadamente (código 0x{unchecked((uint)processo.ExitCode):X8} — {TraduzirExitCode(processo.ExitCode)}).");
         }
         finally

@@ -6,7 +6,7 @@ using Piloto.Core.Text;
 namespace Piloto.Rules;
 
 /// <summary>
-/// Camada 1 — REGRAS. Extrai telefone, CPF, e-mail, datas, valores e protocolo do texto
+/// Camada 1 — REGRAS. Extrai telefone, CPF/CNPJ, e-mail, datas, valores e protocolo do texto
 /// já normalizado, atribuindo confiança a cada detecção. Trechos já classificados são
 /// "consumidos" para evitar que o mesmo número vire dois campos.
 /// </summary>
@@ -32,6 +32,12 @@ public sealed class RuleExtractor : IRuleExtractor
 
     private static readonly Regex ReCpf = new(
         @"\b(\d{3})[.\s]?(\d{3})[.\s]?(\d{3})[-\s]?(\d{2})\b", RegexOptions.Compiled);
+
+    // Raiz (8 dígitos, com ou sem pontos), filial (4) e verificadores (2). Os separadores
+    // toleram vírgula/espaço porque o número ditado chega fragmentado do Whisper
+    // ("12344567, 0001-11" após a normalização).
+    private static readonly Regex ReCnpj = new(
+        @"\b(\d{2})[.\s]?(\d{3})[.\s]?(\d{3})[\s.,/-]{0,3}(\d{4})[\s.,-]{0,3}(\d{2})\b", RegexOptions.Compiled);
 
     private static readonly Regex ReTelefoneFormatado = new(
         @"\(?\b(\d{2})\)?[\s-]?(9?\d{4})[\s-]?(\d{4})\b", RegexOptions.Compiled);
@@ -143,7 +149,31 @@ public sealed class RuleExtractor : IRuleExtractor
             Consumir(m);
         }
 
-        // 5) CPF (com separadores sempre; 11 dígitos crus só se passar no verificador)
+        // 5) CNPJ (antes do CPF: 14 dígitos fragmentados poderiam confundir as regras menores).
+        //    Aceita se os verificadores batem OU se a filial/separadores denunciam o formato
+        //    ("/", filial 0001) — número ditado por telefone raramente chega com pontuação.
+        foreach (Match m in ReCnpj.Matches(texto))
+        {
+            if (!Livre(m)) continue;
+            var digitos = TextUtils.SomenteDigitos(m.Value);
+            if (digitos.Length != 14) continue;
+
+            var valido = Validators.CnpjValido(digitos);
+            var filial = digitos.Substring(8, 4);
+            var temFormato = m.Value.Contains('/') || filial == "0001";
+            if (!valido && !temFormato) continue; // deixa para telefone/protocolo
+
+            campos.Cpfs.Add(new ExtractedValue
+            {
+                Tipo = FieldType.Cnpj,
+                Valor = FormatarCnpj(digitos),
+                TrechoOrigem = m.Value,
+                Confianca = valido ? 0.95 : 0.6,
+            });
+            Consumir(m);
+        }
+
+        // 6) CPF (com separadores sempre; 11 dígitos crus só se passar no verificador)
         foreach (Match m in ReCpf.Matches(texto))
         {
             if (!Livre(m)) continue;
@@ -162,7 +192,7 @@ public sealed class RuleExtractor : IRuleExtractor
             Consumir(m);
         }
 
-        // 6) Telefone (formatado com DDD e, depois, sequências cruas de 10-11 dígitos)
+        // 7) Telefone (formatado com DDD e, depois, sequências cruas de 10-11 dígitos)
         foreach (Match m in ReTelefoneFormatado.Matches(texto))
         {
             if (!Livre(m)) continue;
@@ -179,7 +209,7 @@ public sealed class RuleExtractor : IRuleExtractor
             Consumir(m);
         }
 
-        // 7) Protocolo por dígitos longos remanescentes (baixa confiança)
+        // 8) Protocolo por dígitos longos remanescentes (baixa confiança)
         foreach (Match m in ReDigitosLongos.Matches(texto))
         {
             if (!Livre(m)) continue;
@@ -213,4 +243,9 @@ public sealed class RuleExtractor : IRuleExtractor
 
     private static string FormatarCpf(string d)
         => d.Length == 11 ? $"{d[..3]}.{d.Substring(3, 3)}.{d.Substring(6, 3)}-{d.Substring(9, 2)}" : d;
+
+    private static string FormatarCnpj(string d)
+        => d.Length == 14
+            ? $"{d[..2]}.{d.Substring(2, 3)}.{d.Substring(5, 3)}/{d.Substring(8, 4)}-{d.Substring(12, 2)}"
+            : d;
 }

@@ -27,6 +27,37 @@ public class RuleExtractorTests
     }
 
     [Fact]
+    public void ExtraiCnpjFormatadoValido()
+    {
+        // 11.222.333/0001-81 tem verificadores válidos.
+        var campos = _rules.Extrair(TestData.Fala("o cnpj é 11.222.333/0001-81 da empresa"));
+        var cnpj = Assert.Single(campos.Cpfs);
+        Assert.Equal(FieldType.Cnpj, cnpj.Tipo);
+        Assert.Equal("11.222.333/0001-81", cnpj.Valor);
+        Assert.True(cnpj.Confianca >= 0.9);
+    }
+
+    [Fact]
+    public void ExtraiCnpjDitadoComMilContra()
+    {
+        // Como o Whisper transcreveu em campo: dígitos soltos + "1000 contra" no lugar de "/0001-".
+        var campos = _rules.Extrair(TestData.Fala("claro, é 1, 2, 3, 4, 4, 5, 6, 7, 1000 contra 11."));
+        var cnpj = Assert.Single(campos.Cpfs);
+        Assert.Equal(FieldType.Cnpj, cnpj.Tipo);
+        Assert.Equal("12.344.567/0001-11", cnpj.Valor);
+        Assert.Empty(campos.Telefones);
+        Assert.Empty(campos.Protocolos);
+    }
+
+    [Fact]
+    public void QuatorzeDigitosSemFormatoDeCnpjNaoViraCnpj()
+    {
+        // Sem "/" nem filial 0001 e com verificadores inválidos: fica para protocolo.
+        var campos = _rules.Extrair(TestData.Fala("protocolo 12345678999912 anotado"));
+        Assert.Empty(campos.Cpfs);
+    }
+
+    [Fact]
     public void ExtraiTelefoneFormatado()
     {
         var campos = _rules.Extrair(TestData.Fala("meu número é (11) 91234-5678 tá"));

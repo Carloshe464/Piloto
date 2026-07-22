@@ -69,15 +69,16 @@ public partial class DetailWindow : Window
     private string MontarCampos()
     {
         var sb = new StringBuilder();
-        void Linha(string titulo, IReadOnlyList<ExtractedValue> vs)
+        void Linha(string titulo, IReadOnlyList<ExtractedValue> vs, bool mascarar = true)
         {
             var texto = vs.Count == 0
                 ? "Não identificado"
-                : string.Join("; ", vs.Select(v => $"{PiiMasker.Mascarar(v.Valor)} ({v.Confianca:P0})"));
+                : string.Join("; ", vs.Select(v => $"{(mascarar ? PiiMasker.Mascarar(v.Valor) : v.Valor)} ({v.Confianca:P0})"));
             sb.AppendLine($"{titulo}: {texto}");
         }
         Linha("Telefones", _registro.Campos.Telefones);
-        Linha("CPFs", _registro.Campos.Cpfs);
+        // CPF/CNPJ sem máscara: é o dado que o atendente copia para o cadastro.
+        Linha("CPF/CNPJ", _registro.Campos.Cpfs, mascarar: false);
         Linha("E-mails", _registro.Campos.Emails);
         Linha("Datas", _registro.Campos.Datas);
         Linha("Valores", _registro.Campos.Valores);

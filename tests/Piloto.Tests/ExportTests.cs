@@ -47,6 +47,24 @@ public class ExportTests
         Assert.StartsWith("id;criado_em", linhas[0]);
     }
 
+    [Fact]
+    public void CpfECnpjSaemSemMascaraNosCamposObjetivos()
+    {
+        var registro = Registro();
+        registro.Campos.Cpfs.Add(new ExtractedValue
+        {
+            Tipo = FieldType.Cpf, Valor = "111.444.777-35", TrechoOrigem = "111.444.777-35", Confianca = 0.95,
+        });
+        registro.Campos.Cpfs.Add(new ExtractedValue
+        {
+            Tipo = FieldType.Cnpj, Valor = "12.344.567/0001-11", TrechoOrigem = "12344567 0001 11", Confianca = 0.6,
+        });
+
+        var txt = _exporter.Exportar(registro, ExportFormat.Txt); // máscara de PII ligada (padrão)
+        Assert.Contains("CPF/CNPJ: 111.444.777-35", txt);
+        Assert.Contains("12.344.567/0001-11", txt);
+    }
+
     [Theory]
     [InlineData("111.444.777-35", "***.***.***-35")]
     public void MascaraCpf(string entrada, string esperado)

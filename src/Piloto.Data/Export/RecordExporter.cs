@@ -76,7 +76,9 @@ public sealed class RecordExporter : IExporter
         sb.AppendLine();
         sb.AppendLine("--- CAMPOS OBJETIVOS ---");
         AppendCampos(sb, "Telefones", r.Campos.Telefones, mascarar);
-        AppendCampos(sb, "CPFs", r.Campos.Cpfs, mascarar);
+        // CPF/CNPJ sai SEM máscara mesmo com PII ligado: é o dado que o atendente precisa
+        // copiar para o cadastro — mascarado, o campo não serve para nada.
+        AppendCampos(sb, "CPF/CNPJ", r.Campos.Cpfs, mascarar: false);
         AppendCampos(sb, "E-mails", r.Campos.Emails, mascarar);
         AppendCampos(sb, "Datas", r.Campos.Datas, mascarar);
         AppendCampos(sb, "Valores", r.Campos.Valores, mascarar);
@@ -136,7 +138,7 @@ public sealed class RecordExporter : IExporter
             Campos = new
             {
                 Telefones = MapearCampos(r.Campos.Telefones, mascarar),
-                Cpfs = MapearCampos(r.Campos.Cpfs, mascarar),
+                Cpfs = MapearCampos(r.Campos.Cpfs, mascarar: false),
                 Emails = MapearCampos(r.Campos.Emails, mascarar),
                 Datas = MapearCampos(r.Campos.Datas, mascarar),
                 Valores = MapearCampos(r.Campos.Valores, mascarar),

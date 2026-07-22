@@ -27,4 +27,27 @@ public static class Validators
         var d2 = Digito(10, 11);
         return d1 == (cpf[9] - '0') && d2 == (cpf[10] - '0');
     }
+
+    /// <summary>Valida um CNPJ pelos dois dígitos verificadores (módulo 11, pesos 2..9 cíclicos).</summary>
+    public static bool CnpjValido(string entrada)
+    {
+        var cnpj = TextUtils.SomenteDigitos(entrada);
+        if (cnpj.Length != 14) return false;
+        if (cnpj.Distinct().Count() == 1) return false;
+
+        int Digito(int ate)
+        {
+            var soma = 0;
+            var peso = 2;
+            for (var i = ate - 1; i >= 0; i--)
+            {
+                soma += (cnpj[i] - '0') * peso;
+                peso = peso == 9 ? 2 : peso + 1;
+            }
+            var resto = soma % 11;
+            return resto < 2 ? 0 : 11 - resto;
+        }
+
+        return Digito(12) == (cnpj[12] - '0') && Digito(13) == (cnpj[13] - '0');
+    }
 }

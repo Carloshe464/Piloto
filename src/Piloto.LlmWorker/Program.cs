@@ -32,7 +32,8 @@ internal static class Program
         float Temperatura,
         int Contexto,
         int Threads,
-        int MaxTokens);
+        int MaxTokens,
+        string? Avx = null); // null/"auto" = detectar; "avx2" | "avx" | "none" = forçar (fallback de crash)
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -75,7 +76,7 @@ internal static class Program
 
     private static async Task<string> InferirAsync(Request req)
     {
-        ConfigurarNativo();
+        ConfigurarNativo(req.Avx);
 
         var parameters = new ModelParams(req.Modelo)
         {
@@ -115,16 +116,22 @@ internal static class Program
     /// do LLamaSharp segue a preferência sem testar a CPU), CUDA/Vulkan desligados, e o
     /// log nativo do llama.cpp no stderr — em crash, a última linha aponta onde morreu.
     /// </summary>
-    private static void ConfigurarNativo()
+    private static void ConfigurarNativo(string? avxForcado)
     {
         var nivel = AvxLevel.None;
-        try
+        if (avxForcado is "avx2") nivel = AvxLevel.Avx2;
+        else if (avxForcado is "avx") nivel = AvxLevel.Avx;
+        else if (avxForcado is "none") nivel = AvxLevel.None;
+        else
         {
-            if (System.Runtime.Intrinsics.X86.Avx2.IsSupported) nivel = AvxLevel.Avx2;
-            else if (System.Runtime.Intrinsics.X86.Avx.IsSupported) nivel = AvxLevel.Avx;
+            try
+            {
+                if (System.Runtime.Intrinsics.X86.Avx2.IsSupported) nivel = AvxLevel.Avx2;
+                else if (System.Runtime.Intrinsics.X86.Avx.IsSupported) nivel = AvxLevel.Avx;
+            }
+            catch { /* sem intrinsics x86: None roda em tudo */ }
         }
-        catch { /* sem intrinsics x86: None roda em tudo */ }
-        Console.Error.WriteLine($"[worker] instruções: {nivel}");
+        Console.Error.WriteLine($"[worker] instruções: {nivel}{(avxForcado is null or "auto" ? "" : " (forçado)")}");
 
         try
         {

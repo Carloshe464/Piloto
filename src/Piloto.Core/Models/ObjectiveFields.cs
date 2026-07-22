@@ -5,6 +5,7 @@ public enum FieldType
 {
     Telefone,
     Cpf,
+    Cnpj,
     Email,
     Data,
     Valor,
@@ -37,6 +38,9 @@ public sealed class ExtractedValue
 public sealed class ObjectiveFields
 {
     public List<ExtractedValue> Telefones { get; init; } = new();
+
+    /// <summary>Documentos (CPF e CNPJ) — mantém o nome "Cpfs" pela compatibilidade do
+    /// JSON persistido; o <see cref="ExtractedValue.Tipo"/> distingue os dois.</summary>
     public List<ExtractedValue> Cpfs { get; init; } = new();
     public List<ExtractedValue> Emails { get; init; } = new();
     public List<ExtractedValue> Datas { get; init; } = new();
