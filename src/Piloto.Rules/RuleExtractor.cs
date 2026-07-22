@@ -39,6 +39,15 @@ public sealed class RuleExtractor : IRuleExtractor
     private static readonly Regex ReCnpj = new(
         @"\b(\d{2})[.\s]?(\d{3})[.\s]?(\d{3})[\s.,/-]{0,3}(\d{4})[\s.,-]{0,3}(\d{2})\b", RegexOptions.Compiled);
 
+    // Âncora semântica: quando o atendente pede "seu CNPJ/CPF", os dígitos que vêm logo
+    // depois SÃO o documento — mesmo que o Whisper os tenha estropiado para um total
+    // errado de dígitos (em campo, um CNPJ virou 10 dígitos e caía como telefone
+    // mascarado). Até 40 caracteres entre a palavra e o primeiro dígito cobrem o
+    // "por gentileza? Claro, é" típico.
+    private static readonly Regex ReDocumentoPorContexto = new(
+        @"\b(cnpj|cpf)\b[\s\S]{0,40}?(\d(?:[\s.,/-]{0,3}\d){7,17})",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static readonly Regex ReTelefoneFormatado = new(
         @"\(?\b(\d{2})\)?[\s-]?(9?\d{4})[\s-]?(\d{4})\b", RegexOptions.Compiled);
     private static readonly Regex ReTelefoneBruto = new(
@@ -173,7 +182,50 @@ public sealed class RuleExtractor : IRuleExtractor
             Consumir(m);
         }
 
-        // 6) CPF (com separadores sempre; 11 dígitos crus só se passar no verificador)
+        // 6) Documento ancorado pela palavra "CNPJ"/"CPF" dita na ligação. Pega o que o
+        //    formato estrito do passo 5 deixou passar (Whisper estropiou dígitos): melhor
+        //    um documento com confiança baixa para o humano conferir do que os mesmos
+        //    dígitos saírem como "telefone" mascarado.
+        foreach (Match m in ReDocumentoPorContexto.Matches(texto))
+        {
+            if (!Livre(m)) continue;
+            var palavra = m.Groups[1].Value.ToLowerInvariant();
+            var digitos = TextUtils.SomenteDigitos(m.Groups[2].Value);
+
+            ExtractedValue valor;
+            if (digitos.Length == 14)
+                valor = new ExtractedValue
+                {
+                    Tipo = FieldType.Cnpj,
+                    Valor = FormatarCnpj(digitos),
+                    TrechoOrigem = m.Groups[2].Value,
+                    Confianca = Validators.CnpjValido(digitos) ? 0.95 : 0.6,
+                };
+            else if (digitos.Length == 11 && Validators.CpfValido(digitos))
+                valor = new ExtractedValue
+                {
+                    Tipo = FieldType.Cpf,
+                    Valor = FormatarCpf(digitos),
+                    TrechoOrigem = m.Groups[2].Value,
+                    Confianca = 0.95,
+                };
+            else
+                // Contagem de dígitos não bate com o documento pedido: transcrição
+                // provavelmente perdeu/estropiou dígitos. Sai cru, com confiança baixa —
+                // sinal claro de "confira no áudio".
+                valor = new ExtractedValue
+                {
+                    Tipo = palavra == "cpf" ? FieldType.Cpf : FieldType.Cnpj,
+                    Valor = digitos,
+                    TrechoOrigem = m.Groups[2].Value,
+                    Confianca = 0.4,
+                };
+
+            campos.Cpfs.Add(valor);
+            Consumir(m);
+        }
+
+        // 7) CPF (com separadores sempre; 11 dígitos crus só se passar no verificador)
         foreach (Match m in ReCpf.Matches(texto))
         {
             if (!Livre(m)) continue;
@@ -192,7 +244,7 @@ public sealed class RuleExtractor : IRuleExtractor
             Consumir(m);
         }
 
-        // 7) Telefone (formatado com DDD e, depois, sequências cruas de 10-11 dígitos)
+        // 8) Telefone (formatado com DDD e, depois, sequências cruas de 10-11 dígitos)
         foreach (Match m in ReTelefoneFormatado.Matches(texto))
         {
             if (!Livre(m)) continue;
@@ -209,7 +261,7 @@ public sealed class RuleExtractor : IRuleExtractor
             Consumir(m);
         }
 
-        // 8) Protocolo por dígitos longos remanescentes (baixa confiança)
+        // 9) Protocolo por dígitos longos remanescentes (baixa confiança)
         foreach (Match m in ReDigitosLongos.Matches(texto))
         {
             if (!Livre(m)) continue;

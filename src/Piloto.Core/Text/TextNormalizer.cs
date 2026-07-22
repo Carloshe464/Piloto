@@ -16,10 +16,11 @@ public sealed class TextNormalizer : ITextNormalizer
     private static readonly Regex PontoEmail = new(@"\s+ponto\s+(com|br|net|org|gov)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // A filial "/0001-" de um CNPJ ditado ("barra zero zero zero um traço") chega do
-    // Whisper como "mil contra" ou "1000 contra". Só converte entre dígitos, que é o
-    // contexto de ditado — "mil contra" em prosa comum fica intacto.
+    // Whisper como "mil contra", "1000 contra" ou "1.000 contra" (o small formata o
+    // milhar com ponto). Só converte entre dígitos, que é o contexto de ditado —
+    // "mil contra" em prosa comum fica intacto.
     private static readonly Regex MilContra = new(
-        @"(?<=\d[\s,.]{0,3})\b(?:mil|1000)\s+contra\b[\s,.]*(?=\d)",
+        @"(?<=\d[\s,.]{0,3})\b(?:mil|1[.\s]?000)\s+contra\b[\s,.]*(?=\d)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // "barra" e "traço"/"hífen" ditados entre dígitos viram os separadores reais.
@@ -30,8 +31,10 @@ public sealed class TextNormalizer : ITextNormalizer
 
     // O Whisper transcreve dígitos ditados como "1, 2, 3, 4" — o run de 4+ dígitos
     // soltos separados por vírgula/espaço vira uma sequência contígua ("1234").
+    // Cada membro precisa ser dígito SOLTO: o guard (?!\d|[.,]\d) impede o run de
+    // engolir o primeiro dígito de um número composto ("7, 1.000" para no 7).
     private static readonly Regex DigitosDitados = new(
-        @"\b\d(?:\s*,\s*\d|\s+\d){3,}\b", RegexOptions.Compiled);
+        @"\b\d(?!\d|[.,]\d)(?:(?:\s*,\s*|\s+)\d(?!\d|[.,]\d)){3,}", RegexOptions.Compiled);
 
     public string Normalizar(string texto)
     {

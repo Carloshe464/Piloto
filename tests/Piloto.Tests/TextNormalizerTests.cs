@@ -72,6 +72,24 @@ public class TextNormalizerTests
     }
 
     [Fact]
+    public void MilComPontoDeMilharTambemViraFilial()
+    {
+        // O Whisper small formata "mil" como "1.000" — variante real do registro 34.
+        var r = _n.Normalizar("é 1, 2, 3, 4, 4, 5, 6, 7, 1.000 contra 11.");
+        Assert.Contains("12344567", r);
+        Assert.Contains("0001-11", r);
+    }
+
+    [Fact]
+    public void ColapsoNaoEngoleDigitoDeNumeroComposto()
+    {
+        // O "1" de "1.000" não pode ser tragado pelo run de dígitos soltos.
+        var r = _n.Normalizar("são 2, 4, 6, 8 e depois 1.000 unidades");
+        Assert.Contains("2468", r);
+        Assert.Contains("1.000", r);
+    }
+
+    [Fact]
     public void MilContraEmProsaComumFicaIntacto()
     {
         var r = _n.Normalizar("eram mil contra um naquela disputa");

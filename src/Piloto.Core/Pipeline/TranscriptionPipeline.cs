@@ -73,6 +73,7 @@ public sealed class TranscriptionPipeline
         // e os campos objetivos, que já custaram a passada do Whisper, são preservados.
         LlmSummary resumo;
         string? erroLlm = null;
+        var dialogoTruncadoNoResumo = false;
         if (transcript.EstaVazio)
         {
             // Sem fala não há o que resumir — e carregar o LLM à toa é justamente o passo
@@ -87,6 +88,10 @@ public sealed class TranscriptionPipeline
             // nas de pouca RAM, a folga liberada decide se o resumo roda.
             if (!MemoriaComportaLlmSemLiberarWhisper())
                 _transcriber.LiberarModelo();
+
+            // O PromptBuilder corta ligações longas (início + fim) para caber no contexto;
+            // quem lê o resumo precisa saber que o miolo não foi lido.
+            dialogoTruncadoNoResumo = transcript.TextoRotulado().Length > ResumoLimites.MaxCharsDialogo;
 
             _log.LogInformation("Resumindo com LLM local (camada 2)");
             try
@@ -122,6 +127,20 @@ public sealed class TranscriptionPipeline
 
         if (erroLlm is not null)
             registro.MarcarRevisao($"Resumo automático indisponível — {MarcadorErroLlm}: {erroLlm}");
+
+        if (dialogoTruncadoNoResumo)
+            registro.MarcarRevisao("Ligação longa: o resumo automático considerou início e fim do diálogo — o trecho intermediário não foi lido pelo LLM.");
+
+        // Fisicamente impossível falar além do fim da ligação: timestamps suspeitos
+        // embaralham a ordem do diálogo (a compressão no transcritor trata o caso comum;
+        // isto é a rede de segurança que avisa o humano quando ainda assim escapou).
+        if (!transcript.EstaVazio && captura.Duracao > TimeSpan.Zero)
+        {
+            var fimMax = transcript.Segmentos.Max(s => s.Fim);
+            if (fimMax > captura.Duracao * 1.1 + TimeSpan.FromSeconds(2))
+                registro.MarcarRevisao(
+                    $"Tempos de fala além da duração da ligação (fala até {fimMax:mm\\:ss} numa ligação de {captura.Duracao:mm\\:ss}) — a ordem do diálogo pode estar imprecisa.");
+        }
 
         // Uma ligação real sem NENHUMA fala reconhecível é falha (captura ou transcrição),
         // nunca um registro "válido" de aparência normal.

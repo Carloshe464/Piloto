@@ -14,12 +14,13 @@ internal static class CallSerialization
         Converters = { new JsonStringEnumConverter() },
     };
 
-    private sealed record SegmentDto(string Speaker, double InicioSeg, double FimSeg, string Texto);
+    // Confianca nullable e com default: JSON antigo (sem o campo) continua legível.
+    private sealed record SegmentDto(string Speaker, double InicioSeg, double FimSeg, string Texto, double? Confianca = null);
 
     public static string SerializarTranscript(Transcript t)
     {
         var dtos = t.Segmentos.Select(s => new SegmentDto(
-            s.Speaker.ToString(), s.Inicio.TotalSeconds, s.Fim.TotalSeconds, s.Texto));
+            s.Speaker.ToString(), s.Inicio.TotalSeconds, s.Fim.TotalSeconds, s.Texto, s.Confianca));
         return JsonSerializer.Serialize(dtos, Opts);
     }
 
@@ -33,6 +34,7 @@ internal static class CallSerialization
             Inicio = TimeSpan.FromSeconds(d.InicioSeg),
             Fim = TimeSpan.FromSeconds(d.FimSeg),
             Texto = d.Texto,
+            Confianca = d.Confianca,
         });
         return new Transcript(segs);
     }

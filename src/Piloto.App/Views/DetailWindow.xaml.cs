@@ -57,7 +57,7 @@ public partial class DetailWindow : Window
             {
                 Rotulo = s.Speaker.Rotulo(),
                 Horario = s.Inicio.ToString(@"mm\:ss"),
-                Texto = PiiMasker.Mascarar(s.Texto.Trim()),
+                Texto = PiiMasker.Mascarar(s.Texto.Trim()) + (s.ConfiancaBaixa ? " (⚠ trecho incerto)" : ""),
                 EhAtendente = s.Speaker == Speaker.Atendente,
             })
             .ToList();

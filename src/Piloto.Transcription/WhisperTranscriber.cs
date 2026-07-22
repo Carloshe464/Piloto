@@ -179,13 +179,54 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
                 Inicio = seg.Start,
                 Fim = seg.End,
                 Texto = texto,
+                // Guardada no registro: um trecho de 35% precisa aparecer diferente de um de 95%.
+                Confianca = seg.Probability > 0f ? seg.Probability : null,
             });
         }
+
+        // Loop de alucinação: a mesma frase inocente repetida em série sobre música/ruído
+        // vem com confiança alta e texto normal — só a série idêntica denuncia.
+        var repetidos = TranscriptSanitizer.ColapsarRepeticoes(resultado);
+        if (repetidos > 0)
+        {
+            descartados += repetidos;
+            _log.LogInformation("Canal {Speaker}: {N} repetição(ões) idêntica(s) consecutivas descartadas (loop de alucinação)", speaker, repetidos);
+        }
+
+        // Timestamps além do fim do áudio embaralham a intercalação do diálogo e inflam
+        // o TempoFalado (registros 29 e 34) — comprime de volta ao teto da duração real.
+        var duracaoAudio = DuracaoDoWav(info);
+        var fator = duracaoAudio is { } d ? TranscriptSanitizer.ComprimirTimestamps(resultado, d) : null;
+        if (fator is { } f)
+            _log.LogWarning("Canal {Speaker}: timestamps além do áudio ({FimMax:0.#} s num áudio de {Duracao:0.#} s) — comprimidos por fator {Fator:0.00}",
+                speaker, resultado.Max(s => s.Fim).TotalSeconds / f, duracaoAudio!.Value.TotalSeconds, f);
 
         if (descartados > 0)
             _log.LogInformation("Canal {Speaker}: {N} segmento(s) descartado(s) (baixa confiança ou alucinação)", speaker, descartados);
         _log.LogInformation("Canal {Speaker}: {N} segmentos", speaker, resultado.Count);
         return resultado;
+    }
+
+    /// <summary>Duração real do WAV pelo cabeçalho (byte rate no offset 28 do formato
+    /// canônico que os gravadores do Piloto escrevem). Null se o cabeçalho não for o esperado —
+    /// nesse caso a compressão de timestamps é pulada, nunca aplicada com base errada.</summary>
+    private static TimeSpan? DuracaoDoWav(FileInfo info)
+    {
+        try
+        {
+            using var fs = info.OpenRead();
+            Span<byte> cab = stackalloc byte[44];
+            if (fs.Read(cab) != 44) return null;
+            if (cab[0] != (byte)'R' || cab[1] != (byte)'I' || cab[2] != (byte)'F' || cab[3] != (byte)'F') return null;
+
+            var byteRate = BitConverter.ToInt32(cab.Slice(28, 4));
+            if (byteRate <= 0) return null;
+            return TimeSpan.FromSeconds((info.Length - 44) / (double)byteRate);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
     }
 
     public bool LiberarModelo()

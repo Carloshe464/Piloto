@@ -50,6 +50,29 @@ public class RuleExtractorTests
     }
 
     [Fact]
+    public void CnpjComMilPontoZeroZeroZero()
+    {
+        // Variante do Whisper small: "1.000 contra" no lugar de "mil contra".
+        var campos = _rules.Extrair(TestData.Fala("é 1, 2, 3, 4, 4, 5, 6, 7, 1.000 contra 11."));
+        var cnpj = Assert.Single(campos.Cpfs);
+        Assert.Equal("12.344.567/0001-11", cnpj.Valor);
+    }
+
+    [Fact]
+    public void DigitosEstropiadosAposPalavraCnpjViramDocumentoENaoTelefone()
+    {
+        // Caso de campo (registro 34 no modelo small): o CNPJ ditado virou uma contagem
+        // errada de dígitos e caía como telefone mascarado. A palavra "CNPJ" ancora.
+        var campos = _rules.Extrair(TestData.Fala(
+            "você pode me confirmar o seu CNPJ por gentileza? Claro, é 12, 34, 45, 67, 111."));
+        var doc = Assert.Single(campos.Cpfs);
+        Assert.Equal(FieldType.Cnpj, doc.Tipo);
+        Assert.Equal("12344567111", doc.Valor);
+        Assert.True(doc.Confianca < 0.5); // contagem errada = confira no áudio
+        Assert.Empty(campos.Telefones);
+    }
+
+    [Fact]
     public void QuatorzeDigitosSemFormatoDeCnpjNaoViraCnpj()
     {
         // Sem "/" nem filial 0001 e com verificadores inválidos: fica para protocolo.

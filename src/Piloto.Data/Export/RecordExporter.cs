@@ -86,7 +86,9 @@ public sealed class RecordExporter : IExporter
 
         sb.AppendLine();
         sb.AppendLine("--- DIÁLOGO ---");
-        sb.AppendLine(mascarar ? PiiMasker.Mascarar(r.Transcript.TextoRotulado()) : r.Transcript.TextoRotulado());
+        // Marcador de trecho incerto ligado: quem lê precisa saber em qual fala desconfiar.
+        var dialogo = r.Transcript.TextoRotulado(marcarBaixaConfianca: true);
+        sb.AppendLine(mascarar ? PiiMasker.Mascarar(dialogo) : dialogo);
 
         return sb.ToString().TrimEnd();
     }

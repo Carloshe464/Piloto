@@ -33,9 +33,10 @@ public sealed class PromptBuilder
     /// listas (~500 tokens) e a saída (700), sobram ~2.900 tokens ≈ 10.000 caracteres para
     /// o diálogo. Ligações longas são cortadas no meio: a abertura carrega o motivo do
     /// contato; o final, a resolução e o próximo passo. Sem o corte, o prompt estoura o
-    /// contexto e a saída vem truncada ou vazia.
+    /// contexto e a saída vem truncada ou vazia. O valor mora em <see cref="ResumoLimites"/>:
+    /// o pipeline usa o MESMO número para avisar o humano que o resumo não viu o miolo.
     /// </summary>
-    private const int MaxCharsDialogo = 10_000;
+    private const int MaxCharsDialogo = ResumoLimites.MaxCharsDialogo;
 
     internal static string LimitarDialogo(string dialogo)
     {

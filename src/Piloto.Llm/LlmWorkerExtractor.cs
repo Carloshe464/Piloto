@@ -414,14 +414,18 @@ public sealed class LlmWorkerExtractor : ILlmExtractor
 
     /// <summary>
     /// Além dos pesos (mmap, mas viram working set ao inferir), o llama.cpp aloca KV cache
-    /// + buffers de computação, que crescem com o modelo e o contexto. A margem de 384 MB
-    /// provou ser fina demais em campo (o malloc abortou com ~140 MB de sobra); margem
-    /// generosa converte o crash em "registro sem resumo", que é o comportamento honesto.
+    /// + buffers de computação, que crescem com o modelo e o contexto. A margem de 768 MB
+    /// era calibrada para a era em que o crash derrubava o APP; com o worker isolado, o
+    /// pior caso de uma carga apertada é perder minutos — e em campo o guard gordo passou
+    /// a ser o próprio bloqueio: a máquina de 12 GB vive com 1,0-1,4 GB livres e a camada 2
+    /// nunca rodava (necessários 1.536 MB para um modelo de 769). Margem enxuta: o mmap
+    /// pagina dos arquivos sob pressão (lento, mas termina) e o commit livre (7-8 GB lá)
+    /// continua sendo checado.
     /// </summary>
     private static long NecessarioParaCarga(string caminho)
     {
         var modelo = new FileInfo(caminho).Length;
-        var margem = Math.Max(768L * 1024 * 1024, modelo / 2);
+        var margem = Math.Max(384L * 1024 * 1024, modelo / 4);
         return modelo + margem;
     }
 }
