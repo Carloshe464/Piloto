@@ -57,6 +57,8 @@ public sealed class RecordExporter : IExporter
         sb.AppendLine($"Duração: {Formatar(r.Duracao)}   Tempo falado: {Formatar(r.TempoFalado)}");
         sb.AppendLine($"Número: {OuNaoIdent(M(r.Metadata.Numero))}   Ticket: {OuNaoIdent(r.Metadata.TicketId)}");
         sb.AppendLine($"Atendente: {OuNaoIdent(r.Metadata.Atendente)}   Status Zendesk: {OuNaoIdent(r.Metadata.Status)}");
+        if (!string.IsNullOrWhiteSpace(r.Metadata.NomeCliente))
+            sb.AppendLine($"Cliente (cadastro Zendesk): {r.Metadata.NomeCliente}");
         if (r.PrecisaRevisao)
         {
             sb.AppendLine();
@@ -103,7 +105,9 @@ public sealed class RecordExporter : IExporter
         var itens = valores.Select(v =>
         {
             var valor = mascarar ? PiiMasker.Mascarar(v.Valor) : v.Valor;
-            return $"{valor} ({v.Confianca:P0})";
+            // Quem lê o TXT precisa distinguir o que veio do cadastro do que o Whisper
+            // ouviu — o segundo pode estar errado sem que nada no valor denuncie.
+            return v.EhDoCadastro ? $"{valor} (cadastro Zendesk)" : $"{valor} ({v.Confianca:P0})";
         });
         sb.AppendLine($"{titulo}: {string.Join("; ", itens)}");
     }
@@ -125,6 +129,7 @@ public sealed class RecordExporter : IExporter
                 r.Metadata.TicketId,
                 r.Metadata.Status,
                 r.Metadata.Atendente,
+                r.Metadata.NomeCliente,
             },
             PrecisaRevisao = r.PrecisaRevisao,
             MotivosRevisao = r.MotivosRevisao,
@@ -156,7 +161,12 @@ public sealed class RecordExporter : IExporter
     }
 
     private static object[] MapearCampos(IReadOnlyList<ExtractedValue> valores, bool mascarar)
-        => valores.Select(v => (object)new { Valor = Aplicar(v.Valor, mascarar), v.Confianca }).ToArray();
+        => valores.Select(v => (object)new
+        {
+            Valor = Aplicar(v.Valor, mascarar),
+            v.Confianca,
+            Origem = v.Origem.ToString(),
+        }).ToArray();
 
     // -------------------------------------------------------------------- CSV
 

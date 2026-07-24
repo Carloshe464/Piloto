@@ -5,7 +5,10 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <RootNamespace>Piloto.App</RootNamespace>
-    <AssemblyName>Piloto</AssemblyName>
+    <!-- Nome comercial no executável. Os namespaces e nomes de projeto continuam
+         Piloto.* de propósito: renomeá-los seria churn em todo o repositório sem
+         nenhum efeito para quem usa o app. -->
+    <AssemblyName>ClickWrite</AssemblyName>
   </PropertyGroup>
 
   <!-- O SDK de WPF não inclui System.IO nos usings implícitos; adiciona globalmente. -->

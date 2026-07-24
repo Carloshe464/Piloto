@@ -80,7 +80,7 @@ public partial class MainWindow : Window
         {
             _log.LogError(ex, "Falha ao alternar gravação");
             MessageBox.Show("Não foi possível acessar o áudio:\n\n" + ex.Message,
-                "Piloto", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Click Write", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         AtualizarContadores();
     }

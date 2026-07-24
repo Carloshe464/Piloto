@@ -39,7 +39,7 @@ jobs:
           --self-contained true -p:PublishSingleFile=false
           -o publish/
 
-      # O worker vai para a MESMA pasta: Piloto.LlmWorker.exe fica ao lado do Piloto.exe
+      # O worker vai para a MESMA pasta: Piloto.LlmWorker.exe fica ao lado do ClickWrite.exe
       # (é onde o app o procura) e compartilha o runtime e os nativos do LLamaSharp já
       # publicados — mesmas versões de pacote, arquivos idênticos.
       - name: Publish LLM worker (processo isolado)
@@ -56,11 +56,11 @@ jobs:
       - name: Artifact do instalador
         uses: actions/upload-artifact@v4
         with:
-          name: piloto-setup
-          path: installer/Output/PilotoSetup-*.exe
+          name: clickwrite-setup
+          path: installer/Output/ClickWriteSetup-*.exe
 
       - name: Release (somente em tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: installer/Output/PilotoSetup-*.exe
+          files: installer/Output/ClickWriteSetup-*.exe

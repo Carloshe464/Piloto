@@ -5,9 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <Company>Piloto</Company>
-    <Product>Piloto — Transcrição Local de Ligações</Product>
-    <Version>0.7.16</Version>
+    <Company>Click Write</Company>
+    <Product>Click Write — Transcrição Local de Ligações</Product>
+    <Version>1.0.0</Version>
     <NeutralLanguage>pt-BR</NeutralLanguage>
   </PropertyGroup>
 </Project>

@@ -68,6 +68,10 @@ public sealed class TranscriptionPipeline
         _log.LogInformation("Aplicando regras (camada 1)");
         var campos = _rules.Extrair(transcript);
 
+        // Contato lido do cadastro do Zendesk entra depois das regras e vence o que a
+        // transcrição deu para o mesmo valor: é dado digitado, não dado ouvido.
+        ContactMerger.Aplicar(campos, captura.Metadata);
+
         // O LLM é a camada opcional: se falhar (modelo incompatível, corrompido, sem
         // memória), o registro sai sem resumo e marcado para revisão — a transcrição
         // e os campos objetivos, que já custaram a passada do Whisper, são preservados.

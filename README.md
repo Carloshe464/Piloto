@@ -1,8 +1,18 @@
-# Piloto — Transcrição Local de Ligações (Zendesk)
+# Click Write — Transcrição Local de Ligações (Zendesk)
 
 Aplicativo Windows que grava as ligações atendidas pelo discador web do Zendesk, transcreve localmente com Whisper e gera registros estruturados (resumo, motivo, pedido, campos objetivos) — **sem enviar áudio ou texto para nenhuma API externa**.
 
-> **Status:** piloto em construção. Hardware de referência: Intel Core i5 10ª geração, 12 GB RAM, SSD, Windows 10/11 64 bits.
+> **Status:** 1.0. Hardware de referência: Intel Core i5 10ª geração, 12 GB RAM, SSD, Windows 10/11 64 bits.
+
+> **Sobre o nome:** o produto se chama **Click Write** a partir da 1.0 (era "Piloto" até a 0.7.x).
+> A mudança é de identidade — instalador, executável (`ClickWrite.exe`), pasta de instalação e
+> telas. **Não** foram renomeados, de propósito:
+>
+> | O quê | Por quê |
+> |---|---|
+> | Projetos e namespaces `Piloto.*` | Renomear seria churn no repositório inteiro sem efeito nenhum para quem usa o app |
+> | Pasta de dados `%LOCALAPPDATA%\Piloto` | Guarda banco, histórico e modelos (~2,6 GB) — renomear custaria um novo download por máquina |
+> | Mutex `PilotoAppMutex` | É por ele que o instalador da 1.0 detecta uma 0.7.x rodando e a fecha antes de atualizar |
 
 ---
 
@@ -27,6 +37,9 @@ Normalização do texto (números falados → dígitos, etc.)
         ↓
 Camada 1 — REGRAS: telefone, CPF, e-mail, datas, valores, protocolo (+ confiança)
         ↓
+Fusão com o CADASTRO: e-mail, telefone e número do discador lidos do Zendesk
+  entram como fonte confiável e vencem o mesmo valor ouvido na ligação
+        ↓
 Camada 2 — LLM LOCAL (Gemma 3 4B Q4 via llama.cpp): resumo PT-BR,
   motivo/produto/status (listas fechadas), pedido, próximo passo
   — saída JSON forçada por gramática, temperatura 0
@@ -40,6 +53,10 @@ SQLite + FTS5 → histórico, busca, exportação TXT/JSON/CSV, notificação
 Regras de ouro do pipeline:
 
 - Campo não encontrado = `null` / `Não identificado`. **Nunca inventar dados.**
+- **Cadastro vence transcrição.** E-mail e telefone ditados por voz são o que o Whisper mais
+  erra, e o erro sai plausível — nenhuma regra detecta um dígito trocado. Quando a extensão
+  lê o contato do solicitante no Zendesk, esse valor substitui o ouvido e é marcado como
+  `Cadastro` na tela; o que foi ouvido continua visível com a confiança da detecção.
 - `motivo_contato`, `produto` e `status` são **listas fechadas** configuráveis pelo administrador — o LLM escolhe, não redige.
 - Whisper sempre em `task=transcribe` + `language=pt` (o modo `translate` verte para inglês — nunca usar).
 - Uma transcrição por vez, processo em prioridade baixa: a máquina do atendente continua usável.
@@ -64,7 +81,7 @@ Regras de ouro do pipeline:
 ## Estrutura do repositório
 
 ```text
-Piloto/
+Piloto/                         # nome do repositório; o produto é o Click Write
 ├── src/
 │   ├── Piloto.App/             # WPF: bandeja, histórico, detalhe, configurações
 │   ├── Piloto.Core/            # domínio: fila, pipeline, normalização, grounding
@@ -138,6 +155,9 @@ Sem os modelos baixados o app abre normalmente, mas a fila fica pausada com o av
 1. Abra `chrome://extensions` (ou `edge://extensions`), ative o **Modo do desenvolvedor**.
 2. **Carregar sem compactação** → aponte para a pasta `extension/`.
 3. A extensão só ativa em `*.zendesk.com` e conversa com o app em `ws://127.0.0.1:8517` (porta configurável em `config/appsettings.json`).
+4. Clique no ícone da extensão: o popup mostra **"Lido do Zendesk agora"** com o que os
+   seletores estão capturando naquele instante. Campo em `—` com um ticket aberto = seletor
+   desatualizado; é por aí que se ajusta `SELETORES` em `content-zendesk.js`.
 
 ### Onde mexer para modificar cada coisa
 
@@ -148,7 +168,7 @@ Sem os modelos baixados o app abre normalmente, mas a fila fica pausada com o av
 | Prompt do resumo e schema JSON do LLM | `src/Piloto.Llm/Prompts/` |
 | Glossário que melhora o reconhecimento do Whisper | `config/glossario.txt` |
 | Modelo usado (base/small; Gemma/Llama) e threads | `config/appsettings.json` |
-| Seletores do DOM do Zendesk | `extension/content-zendesk.js` |
+| Seletores do DOM do Zendesk (inclui e-mail/telefone do cliente) | `extension/content-zendesk.js` → `SELETORES` |
 | Template do TXT exportado | `src/Piloto.Data/Export/` |
 | Retenção/exclusão automática de áudios | `config/appsettings.json` → `retencaoDias` |
 
@@ -203,14 +223,14 @@ jobs:
       - name: Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: piloto-setup
-          path: installer/Output/PilotoSetup-*.exe
+          name: clickwrite-setup
+          path: installer/Output/ClickWriteSetup-*.exe
 
       - name: Release (somente em tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: installer/Output/PilotoSetup-*.exe
+          files: installer/Output/ClickWriteSetup-*.exe
 ```
 
 ### Publicar uma versão instalável
@@ -226,8 +246,16 @@ O instalador aparece em **Releases** do repositório, pronto para baixar na máq
 
 ## Instalação na máquina de teste/produção
 
-1. Baixar `PilotoSetup-x.y.z.exe` da página de **Releases**.
+1. Baixar `ClickWriteSetup-x.y.z.exe` da página de **Releases**.
 2. Executar — assistente padrão do Windows (pasta, atalhos, iniciar com o Windows).
+
+> **Atualizando uma máquina que tem a 0.7.x ("Piloto")?** Basta rodar o instalador da 1.0
+> por cima: o app em execução é fechado (com confirmação), a instalação vai para
+> `Arquivos de Programas\Click Write`, e a pasta antiga, o grupo do menu Iniciar, o atalho
+> da área de trabalho e a entrada de inicialização da 0.7.x são removidos. Fica **uma**
+> entrada em "Adicionar ou remover programas". **Nenhum dado é perdido** — banco, histórico
+> e modelos continuam em `%LOCALAPPDATA%\Piloto`, que não é tocado.
+
 3. Na primeira execução o app oferece **baixar os modelos** (~3 GB, uma única vez) ou aponta para uma pasta com os modelos já copiados (ambiente sem internet).
 4. Instalar a extensão no navegador do atendente (pasta `extension` incluída na instalação; em escala, distribuir via política de grupo/GPO).
 5. Configurar na tela administrativa: listas fechadas, glossário, retenção e porta do bridge.

@@ -55,7 +55,7 @@ public sealed class LlmWorkerExtractor : ILlmExtractor
         if (_quedasConsecutivas >= MaxQuedasConsecutivas)
             throw new InvalidOperationException(
                 $"Resumo suspenso nesta sessão: o processo do LLM caiu {_quedasConsecutivas} vezes seguidas. " +
-                "Reinicie o Piloto para tentar de novo; o log tem o código de cada queda.");
+                "Reinicie o Click Write para tentar de novo; o log tem o código de cada queda.");
 
         var caminho = EscolherModelo();
         VerificarIntegridade(caminho);
@@ -150,7 +150,7 @@ public sealed class LlmWorkerExtractor : ILlmExtractor
         var exe = Path.Combine(AppContext.BaseDirectory, "Piloto.LlmWorker.exe");
         if (!File.Exists(exe))
             throw new InvalidOperationException(
-                "Piloto.LlmWorker.exe não encontrado ao lado do app — instalação incompleta; reinstale o Piloto.");
+                "Piloto.LlmWorker.exe não encontrado ao lado do app — instalação incompleta; reinstale o Click Write.");
 
         var pastaTrabalho = Path.Combine(_settings.PastaDadosExpandida, "llm-work");
         Directory.CreateDirectory(pastaTrabalho);

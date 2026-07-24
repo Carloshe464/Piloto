@@ -25,6 +25,17 @@ public sealed class BridgeMessage
     [JsonPropertyName("atendente")]
     public string? Atendente { get; set; }
 
+    // ----- Contato do solicitante lido do cadastro do Zendesk -----
+
+    [JsonPropertyName("emailCliente")]
+    public string? EmailCliente { get; set; }
+
+    [JsonPropertyName("telefoneCliente")]
+    public string? TelefoneCliente { get; set; }
+
+    [JsonPropertyName("nomeCliente")]
+    public string? NomeCliente { get; set; }
+
     // ----- Áudio capturado pela extensão (hook WebRTC no softphone) -----
 
     /// <summary>"atendente" ou "cliente".</summary>
@@ -45,6 +56,9 @@ public sealed class BridgeMessage
         TicketId = Ticket,
         Status = Status,
         Atendente = Atendente,
+        EmailCliente = EmailCliente,
+        TelefoneCliente = TelefoneCliente,
+        NomeCliente = NomeCliente,
     };
 }
 

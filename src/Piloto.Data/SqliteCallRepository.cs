@@ -173,12 +173,14 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
                       (uuid, numero, ticket, status_zendesk, atendente, iniciada_em, encerrada_em, criado_em,
                        duracao_seg, tempo_falado_seg, audio_atendente, audio_cliente,
                        transcript_json, transcript_texto, campos_json, resumo_json, resumo_texto,
-                       motivo, produto, status_resumo, precisa_revisao, motivos_revisao_json)
+                       motivo, produto, status_resumo, precisa_revisao, motivos_revisao_json,
+                       email_cliente, telefone_cliente, nome_cliente)
                     VALUES
                       ($uuid, $numero, $ticket, $statusz, $atendente, $ini, $fim, $criado,
                        $dur, $falado, $aa, $ac,
                        $tjson, $ttexto, $cjson, $rjson, $rtexto,
-                       $motivo, $produto, $statusr, $revisao, $motivosrev);
+                       $motivo, $produto, $statusr, $revisao, $motivosrev,
+                       $emailc, $telc, $nomec);
                     """;
                 var texto = r.Transcript.TextoRotulado();
                 var resumoTexto = ResumoParaTexto(r);
@@ -204,6 +206,9 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
                 cmd.Parameters.AddWithValue("$statusr", (object?)r.Resumo.Status ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$revisao", r.PrecisaRevisao ? 1 : 0);
                 cmd.Parameters.AddWithValue("$motivosrev", CallSerialization.Serializar(r.MotivosRevisao));
+                cmd.Parameters.AddWithValue("$emailc", (object?)r.Metadata.EmailCliente ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$telc", (object?)r.Metadata.TelefoneCliente ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$nomec", (object?)r.Metadata.NomeCliente ?? DBNull.Value);
                 cmd.ExecuteNonQuery();
             }
 
@@ -248,7 +253,8 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
                         transcript_json=$tjson, transcript_texto=$ttexto, campos_json=$cjson,
                         resumo_json=$rjson, resumo_texto=$rtexto,
                         motivo=$motivo, produto=$produto, status_resumo=$statusr,
-                        precisa_revisao=$revisao, motivos_revisao_json=$motivosrev
+                        precisa_revisao=$revisao, motivos_revisao_json=$motivosrev,
+                        email_cliente=$emailc, telefone_cliente=$telc, nome_cliente=$nomec
                     WHERE id=$id;
                     """;
                 cmd.Parameters.AddWithValue("$id", r.Id);
@@ -272,6 +278,9 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
                 cmd.Parameters.AddWithValue("$statusr", (object?)r.Resumo.Status ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$revisao", r.PrecisaRevisao ? 1 : 0);
                 cmd.Parameters.AddWithValue("$motivosrev", CallSerialization.Serializar(r.MotivosRevisao));
+                cmd.Parameters.AddWithValue("$emailc", (object?)r.Metadata.EmailCliente ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$telc", (object?)r.Metadata.TelefoneCliente ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$nomec", (object?)r.Metadata.NomeCliente ?? DBNull.Value);
                 cmd.ExecuteNonQuery();
             }
 
@@ -476,7 +485,8 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
     private const string SelectCalls = """
         SELECT id, uuid, numero, ticket, status_zendesk, atendente, iniciada_em, encerrada_em, criado_em,
                duracao_seg, tempo_falado_seg, audio_atendente, audio_cliente,
-               transcript_json, campos_json, resumo_json, precisa_revisao, motivos_revisao_json
+               transcript_json, campos_json, resumo_json, precisa_revisao, motivos_revisao_json,
+               email_cliente, telefone_cliente, nome_cliente
         FROM calls
         """;
 
@@ -516,6 +526,9 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
                 Atendente = r.IsDBNull(5) ? null : r.GetString(5),
                 IniciadaEm = r.IsDBNull(6) ? null : ParseDto(r.GetString(6)),
                 EncerradaEm = r.IsDBNull(7) ? null : ParseDto(r.GetString(7)),
+                EmailCliente = r.IsDBNull(18) ? null : r.GetString(18),
+                TelefoneCliente = r.IsDBNull(19) ? null : r.GetString(19),
+                NomeCliente = r.IsDBNull(20) ? null : r.GetString(20),
             },
             CriadoEm = ParseDto(r.GetString(8)),
             Duracao = TimeSpan.FromSeconds(r.GetDouble(9)),

@@ -31,7 +31,7 @@ public sealed class TrayIconController : IDisposable
         _itemNaoGravar = new MenuItem { Header = "Não gravar esta chamada", IsEnabled = false };
         _itemNaoGravar.Click += (_, _) => naoGravar();
 
-        var itemAbrir = new MenuItem { Header = "Abrir Piloto" };
+        var itemAbrir = new MenuItem { Header = "Abrir Click Write" };
         itemAbrir.Click += (_, _) => abrir();
 
         var itemConfig = new MenuItem { Header = "Configurações…" };
@@ -51,7 +51,7 @@ public sealed class TrayIconController : IDisposable
 
         _tray = new TaskbarIcon
         {
-            ToolTipText = "Piloto — pronto",
+            ToolTipText = "Click Write — pronto",
             Icon = IconeOcioso,
             ContextMenu = menu,
         };
@@ -61,7 +61,7 @@ public sealed class TrayIconController : IDisposable
     public void AtualizarGravacao(bool gravando)
     {
         _tray.Icon = gravando ? IconeGravando : IconeOcioso;
-        _tray.ToolTipText = gravando ? "Piloto — GRAVANDO" : "Piloto — pronto";
+        _tray.ToolTipText = gravando ? "Click Write — GRAVANDO" : "Click Write — pronto";
         _itemGravar.Header = gravando ? "Parar e transcrever" : "Iniciar gravação";
         _itemNaoGravar.IsEnabled = gravando;
     }

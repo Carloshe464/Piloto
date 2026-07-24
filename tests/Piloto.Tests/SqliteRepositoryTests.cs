@@ -40,6 +40,41 @@ public class SqliteRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void ContatoDoCadastroSobreviveAoRoundTrip()
+    {
+        // Colunas da migração v2. Sem elas, e-mail/telefone lidos do Zendesk se perdiam
+        // ao reabrir o registro e a origem do valor virava um mistério.
+        var registro = Registro("cliente confirmou os dados");
+        registro.Metadata.EmailCliente = "maria@empresa.com";
+        registro.Metadata.TelefoneCliente = "11912345678";
+        registro.Metadata.NomeCliente = "Maria Souza";
+
+        var id = _repo.SalvarRegistro(registro);
+        var lido = _repo.ObterRegistro(id);
+
+        Assert.NotNull(lido);
+        Assert.Equal("maria@empresa.com", lido!.Metadata.EmailCliente);
+        Assert.Equal("11912345678", lido.Metadata.TelefoneCliente);
+        Assert.Equal("Maria Souza", lido.Metadata.NomeCliente);
+    }
+
+    [Fact]
+    public void OrigemDoCampoSobreviveAoRoundTrip()
+    {
+        var registro = Registro("cliente confirmou os dados");
+        registro.Campos.Emails.Add(new ExtractedValue
+        {
+            Tipo = FieldType.Email, Valor = "maria@empresa.com", TrechoOrigem = "cadastro do Zendesk",
+            Confianca = 1.0, Origem = FieldSource.Extensao,
+        });
+
+        var lido = _repo.ObterRegistro(_repo.SalvarRegistro(registro));
+
+        Assert.NotNull(lido);
+        Assert.Equal(FieldSource.Extensao, Assert.Single(lido!.Campos.Emails).Origem);
+    }
+
+    [Fact]
     public void BuscaFtsEncontraPorTermo()
     {
         _repo.SalvarRegistro(Registro("cliente quer segunda via do boleto"));

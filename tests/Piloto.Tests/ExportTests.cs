@@ -65,6 +65,44 @@ public class ExportTests
         Assert.Contains("12.344.567/0001-11", txt);
     }
 
+    [Fact]
+    public void TxtDistingueOValorDoCadastroDoValorOuvido()
+    {
+        var registro = Registro();
+        registro.Metadata.NomeCliente = "Maria Souza";
+        registro.Campos.Emails.Add(new ExtractedValue
+        {
+            Tipo = FieldType.Email, Valor = "maria@empresa.com", TrechoOrigem = "cadastro do Zendesk",
+            Confianca = 1.0, Origem = FieldSource.Extensao,
+        });
+        registro.Campos.Protocolos.Add(new ExtractedValue
+        {
+            Tipo = FieldType.Protocolo, Valor = "20250715123", TrechoOrigem = "protocolo 20250715123", Confianca = 0.5,
+        });
+
+        var txt = _exporter.Exportar(registro, ExportFormat.Txt, mascararPii: false);
+        Assert.Contains("Cliente (cadastro Zendesk): Maria Souza", txt);
+        Assert.Contains("maria@empresa.com (cadastro Zendesk)", txt);
+        Assert.Contains("20250715123 (50%)", txt);
+    }
+
+    [Fact]
+    public void ExportacaoMascaraContatoVindoDoCadastro()
+    {
+        // O valor ser confiável não o torna menos PII: o que SAI do app continua
+        // mascarado quando a opção está ligada.
+        var registro = Registro();
+        registro.Campos.Emails.Add(new ExtractedValue
+        {
+            Tipo = FieldType.Email, Valor = "maria@empresa.com", TrechoOrigem = "cadastro do Zendesk",
+            Confianca = 1.0, Origem = FieldSource.Extensao,
+        });
+
+        var txt = _exporter.Exportar(registro, ExportFormat.Txt);
+        Assert.DoesNotContain("maria@empresa.com", txt);
+        Assert.Contains("m***@empresa.com", txt);
+    }
+
     [Theory]
     [InlineData("111.444.777-35", "***.***.***-35")]
     public void MascaraCpf(string entrada, string esperado)

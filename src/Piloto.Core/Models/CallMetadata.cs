@@ -14,6 +14,17 @@ public sealed class CallMetadata
     public DateTimeOffset? IniciadaEm { get; set; }
     public DateTimeOffset? EncerradaEm { get; set; }
 
+    // ----- Contato do cliente lido do cadastro do Zendesk (não da fala) -----
+    //
+    // E-mail e telefone ditados por voz são o que o Whisper MAIS erra: uma letra a menos
+    // no e-mail e um dígito trocado no telefone não têm como ser detectados por regra
+    // nenhuma — saem plausíveis e errados. Quando a extensão consegue lê-los do cadastro
+    // do solicitante, essa é a fonte da verdade e vence a transcrição.
+
+    public string? EmailCliente { get; set; }
+    public string? TelefoneCliente { get; set; }
+    public string? NomeCliente { get; set; }
+
     /// <summary>Payload bruto recebido da extensão (para auditoria/depuração).</summary>
     public string? OrigemJson { get; set; }
 

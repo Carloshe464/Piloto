@@ -1,7 +1,7 @@
 ﻿#requires -Version 5.1
 <#
 .SYNOPSIS
-    Acompanha os logs do Piloto em tempo real (fase piloto na máquina de testes).
+    Acompanha os logs do Click Write em tempo real (fase piloto na máquina de testes).
 .DESCRIPTION
     Segue o arquivo de log do dia em %LOCALAPPDATA%\Piloto\logs colorindo por
     severidade (erro em vermelho, aviso em amarelo). Espera o arquivo existir se o
@@ -16,7 +16,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-try { $Host.UI.RawUI.WindowTitle = 'Piloto - Logs ao vivo' } catch {}
+try { $Host.UI.RawUI.WindowTitle = 'Click Write - Logs ao vivo' } catch {}
 
 function ArquivoDoDia { Join-Path $PastaLogs ("piloto-{0:yyyyMMdd}.log" -f (Get-Date)) }
 
@@ -28,7 +28,7 @@ function EscreverLinha([string]$linha) {
     Write-Host $linha -ForegroundColor $cor
 }
 
-Write-Host "== Piloto - logs ao vivo ($PastaLogs) - Ctrl+C para sair ==" -ForegroundColor Cyan
+Write-Host "== Click Write - logs ao vivo ($PastaLogs) - Ctrl+C para sair ==" -ForegroundColor Cyan
 
 while ($true) {
     $arquivo = ArquivoDoDia

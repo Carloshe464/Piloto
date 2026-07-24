@@ -1,4 +1,9 @@
-# Estado do projeto — Piloto
+# Estado do projeto — Click Write
+
+> **1.0** — o produto passou a se chamar **Click Write** (era "Piloto" até a 0.7.x).
+> Renomeados: instalador, executável (`ClickWrite.exe`), pasta de instalação, telas e
+> extensão. Mantidos de propósito: projetos/namespaces `Piloto.*`, a pasta de dados
+> `%LOCALAPPDATA%\Piloto` e o mutex `PilotoAppMutex` — as razões estão no README.
 
 Documento de acompanhamento do desenvolvimento. O README continua sendo a especificação;
 aqui fica **o que já está implementado**, **como validar** e **o que observar**.
@@ -27,6 +32,8 @@ Portanto o ciclo de validação é:
 |---|---|---|
 | Domínio, config, normalização, grounding, pipeline, fila | `Piloto.Core` | ✅ completo |
 | Regras (telefone, CPF+dígito verificador, e-mail, data, valor, protocolo, confiança) | `Piloto.Rules` | ✅ completo |
+| Fusão do contato do cadastro do Zendesk com os campos objetivos | `Piloto.Core` (`ContactMerger`) | ✅ completo |
+| Leitura de e-mail/telefone/nome do solicitante no DOM | `extension/` | ⚠️ seletores placeholder³ — o caminho `mailto:`/`tel:` funciona sem eles |
 | SQLite + FTS5, migrações, exportação TXT/JSON/CSV, PII, retenção | `Piloto.Data` | ✅ completo |
 | WebSocket local da extensão (TcpListener, sem ACL de admin) | `Piloto.Bridge` | ✅ completo |
 | Gravador WASAPI 2 canais → 16 kHz mono | `Piloto.Audio` | ✅ implementado¹ |

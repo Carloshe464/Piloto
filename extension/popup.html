@@ -11,14 +11,24 @@
     .status { margin-top: 12px; font-size: 12px; }
     .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: #6b7280; }
     .ok { background: #22c55e; } .bad { background: #dc2626; } .wait { background: #f59e0b; }
+    .leitura { margin-top: 14px; border-top: 1px solid #334155; padding-top: 10px; }
+    .leitura h2 { font-size: 11px; color: #94a3b8; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+    .campo { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; padding: 2px 0; }
+    .campo span:first-child { color: #94a3b8; flex: 0 0 auto; }
+    .campo span:last-child { color: #e2e8f0; text-align: right; word-break: break-all; }
+    .campo.vazio span:last-child { color: #64748b; }
   </style>
 </head>
 <body>
-  <h1>Piloto — Ponte Zendesk</h1>
+  <h1>Click Write — Ponte Zendesk</h1>
   <label for="porta">Porta do app (bridge)</label>
   <input id="porta" type="number" min="1" max="65535" value="8517" />
   <button id="salvar">Salvar e reconectar</button>
   <div class="status"><span id="dot" class="dot wait"></span><span id="txt">verificando…</span></div>
+  <div class="leitura">
+    <h2>Lido do Zendesk agora</h2>
+    <div id="leitura"></div>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -77,11 +77,16 @@ public sealed class RuleExtractor : IRuleExtractor
 
         void Consumir(Match m) => consumidos.Add((m.Index, m.Index + m.Length));
 
+        // Deduplica: o mesmo telefone repetido na conversa ("é 11 91234-5678" ... "isso,
+        // 11 91234-5678") é UM campo, não dois. Sem isso o painel enche de linhas iguais.
+        static void Registrar(List<ExtractedValue> lista, ExtractedValue v)
+            => ObjectiveFields.Mesclar(lista, v);
+
         // 1) E-mails
         foreach (Match m in ReEmail.Matches(texto))
         {
             if (!Livre(m)) continue;
-            campos.Emails.Add(new ExtractedValue
+            Registrar(campos.Emails, new ExtractedValue
             {
                 Tipo = FieldType.Email,
                 Valor = m.Value.ToLowerInvariant(),
@@ -95,7 +100,7 @@ public sealed class RuleExtractor : IRuleExtractor
         foreach (Match m in ReValorReais.Matches(texto))
         {
             if (!Livre(m)) continue;
-            campos.Valores.Add(new ExtractedValue
+            Registrar(campos.Valores, new ExtractedValue
             {
                 Tipo = FieldType.Valor,
                 Valor = m.Value.Trim(),
@@ -107,7 +112,7 @@ public sealed class RuleExtractor : IRuleExtractor
         foreach (Match m in ReValorPorExtenso.Matches(texto))
         {
             if (!Livre(m)) continue;
-            campos.Valores.Add(new ExtractedValue
+            Registrar(campos.Valores, new ExtractedValue
             {
                 Tipo = FieldType.Valor,
                 Valor = m.Value.Trim(),
@@ -122,7 +127,7 @@ public sealed class RuleExtractor : IRuleExtractor
         {
             if (!Livre(m)) continue;
             if (!DataNumericaPlausivel(m)) continue;
-            campos.Datas.Add(new ExtractedValue
+            Registrar(campos.Datas, new ExtractedValue
             {
                 Tipo = FieldType.Data,
                 Valor = m.Value,
@@ -134,7 +139,7 @@ public sealed class RuleExtractor : IRuleExtractor
         foreach (Match m in ReDataExtenso.Matches(texto))
         {
             if (!Livre(m)) continue;
-            campos.Datas.Add(new ExtractedValue
+            Registrar(campos.Datas, new ExtractedValue
             {
                 Tipo = FieldType.Data,
                 Valor = m.Value.Trim(),
@@ -148,7 +153,7 @@ public sealed class RuleExtractor : IRuleExtractor
         foreach (Match m in ReProtocolo.Matches(texto))
         {
             if (!Livre(m)) continue;
-            campos.Protocolos.Add(new ExtractedValue
+            Registrar(campos.Protocolos, new ExtractedValue
             {
                 Tipo = FieldType.Protocolo,
                 Valor = m.Groups[1].Value.Trim(),
@@ -172,7 +177,7 @@ public sealed class RuleExtractor : IRuleExtractor
             var temFormato = m.Value.Contains('/') || filial == "0001";
             if (!valido && !temFormato) continue; // deixa para telefone/protocolo
 
-            campos.Cpfs.Add(new ExtractedValue
+            Registrar(campos.Cpfs, new ExtractedValue
             {
                 Tipo = FieldType.Cnpj,
                 Valor = FormatarCnpj(digitos),
@@ -221,7 +226,7 @@ public sealed class RuleExtractor : IRuleExtractor
                     Confianca = 0.4,
                 };
 
-            campos.Cpfs.Add(valor);
+            Registrar(campos.Cpfs, valor);
             Consumir(m);
         }
 
@@ -234,7 +239,7 @@ public sealed class RuleExtractor : IRuleExtractor
             var valido = Validators.CpfValido(digitos);
             if (!temSeparador && !valido) continue; // deixa para telefone
 
-            campos.Cpfs.Add(new ExtractedValue
+            Registrar(campos.Cpfs, new ExtractedValue
             {
                 Tipo = FieldType.Cpf,
                 Valor = FormatarCpf(digitos),
@@ -250,14 +255,14 @@ public sealed class RuleExtractor : IRuleExtractor
             if (!Livre(m)) continue;
             var digitos = TextUtils.SomenteDigitos(m.Value);
             if (digitos.Length is < 10 or > 11) continue;
-            campos.Telefones.Add(NovoTelefone(digitos, m.Value, digitos.Length == 11 ? 0.9 : 0.85));
+            Registrar(campos.Telefones, NovoTelefone(digitos, m.Value, digitos.Length == 11 ? 0.9 : 0.85));
             Consumir(m);
         }
         foreach (Match m in ReTelefoneBruto.Matches(texto))
         {
             if (!Livre(m)) continue;
             var digitos = m.Groups[1].Value;
-            campos.Telefones.Add(NovoTelefone(digitos, m.Value, 0.7));
+            Registrar(campos.Telefones, NovoTelefone(digitos, m.Value, 0.7));
             Consumir(m);
         }
 
@@ -265,7 +270,7 @@ public sealed class RuleExtractor : IRuleExtractor
         foreach (Match m in ReDigitosLongos.Matches(texto))
         {
             if (!Livre(m)) continue;
-            campos.Protocolos.Add(new ExtractedValue
+            Registrar(campos.Protocolos, new ExtractedValue
             {
                 Tipo = FieldType.Protocolo,
                 Valor = m.Value,
@@ -275,6 +280,9 @@ public sealed class RuleExtractor : IRuleExtractor
             Consumir(m);
         }
 
+        // Maior confiança primeiro em cada categoria: quem abre o painel lê o valor
+        // confiável na primeira linha, não o palpite de 50% do passo 9.
+        campos.Ordenar();
         return campos;
     }
 

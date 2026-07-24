@@ -12,7 +12,10 @@ namespace Piloto.App;
 public partial class App : Application
 {
     /// <summary>Nome do mutex de instância única — o instalador (setup.iss) usa o mesmo
-    /// nome em CheckForMutexes para detectar o app em execução antes de atualizar.</summary>
+    /// nome em CheckForMutexes para detectar o app em execução antes de atualizar.
+    /// <para><b>Não renomear junto com o produto.</b> É por este nome que o instalador da
+    /// 1.0 (Click Write) reconhece uma 0.7.x (Piloto) rodando e a fecha antes de
+    /// atualizar. Trocá-lo cegaria o instalador na atualização das máquinas em campo.</para></summary>
     private const string NomeMutex = "PilotoAppMutex";
 
     private ServiceProvider? _provider;
@@ -31,8 +34,8 @@ public partial class App : Application
         {
             // Duas instâncias consumiriam a mesma fila SQLite em paralelo (itens duplicados)
             // e a segunda falharia na porta do bridge. Bandeja + autostart tornam isso comum.
-            MessageBox.Show("O Piloto já está em execução — procure o ícone na bandeja, ao lado do relógio.",
-                "Piloto", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("O Click Write já está em execução — procure o ícone na bandeja, ao lado do relógio.",
+                "Click Write", MessageBoxButton.OK, MessageBoxImage.Information);
             _mutex.Dispose();
             _mutex = null;
             Shutdown(0);
@@ -50,7 +53,7 @@ public partial class App : Application
             // Primeira linha de cada sessão: sem ela não dá para saber pelo log qual
             // versão rodou — já perdemos diagnóstico de campo comparando log de versão
             // velha achando que era a nova.
-            _log.LogInformation("Piloto {Versao} iniciado",
+            _log.LogInformation("Click Write {Versao} iniciado",
                 typeof(App).Assembly.GetName().Version?.ToString(3) ?? "?");
 
             var repo = _provider.GetRequiredService<ICallRepository>();
@@ -73,7 +76,7 @@ public partial class App : Application
                 Dispatcher.Invoke(() => _tray!.AtualizarGravacao(gravando));
 
             coordinator.AvisoCaptura += (_, msg) =>
-                Dispatcher.Invoke(() => _tray!.Notificar("Piloto — captura de áudio", msg));
+                Dispatcher.Invoke(() => _tray!.Notificar("Click Write — captura de áudio", msg));
 
             coordinator.ChamadaEnfileirada += (_, id) => Dispatcher.Invoke(() =>
                 _main!.MostrarStatus($"Chamada #{id} enfileirada — captura automática pela extensão."));
@@ -83,7 +86,7 @@ public partial class App : Application
 
             queue.RegistroProcessado += (_, reg) => Dispatcher.Invoke(() =>
             {
-                _tray!.Notificar("Piloto", reg.PrecisaRevisao
+                _tray!.Notificar("Click Write", reg.PrecisaRevisao
                     ? "Nova transcrição pronta — precisa de revisão"
                     : "Nova transcrição pronta");
                 _main!.MostrarStatus($"Ligação #{reg.Id} pronta — transcrição e resumo disponíveis.");
@@ -102,10 +105,10 @@ public partial class App : Application
         catch (Exception ex)
         {
             var arquivo = RegistrarErroInicializacao(ex);
-            _log?.LogError(ex, "Falha ao iniciar o Piloto");
+            _log?.LogError(ex, "Falha ao iniciar o Click Write");
             MessageBox.Show(
-                $"Falha ao iniciar o Piloto:\n\n[{ex.GetType().Name}] {ex.Message}\n\nDetalhes em:\n{arquivo}",
-                "Piloto", MessageBoxButton.OK, MessageBoxImage.Error);
+                $"Falha ao iniciar o Click Write:\n\n[{ex.GetType().Name}] {ex.Message}\n\nDetalhes em:\n{arquivo}",
+                "Click Write", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
         }
     }
@@ -115,6 +118,9 @@ public partial class App : Application
     {
         try
         {
+            // "Piloto" (nome antigo) permanece na PASTA DE DADOS de propósito: lá estão o
+            // banco, o histórico e os modelos (~2,6 GB). Renomear custaria um novo download
+            // por máquina, e o caminho não aparece para o atendente.
             var pasta = Path.Combine(
                 Environment.ExpandEnvironmentVariables("%LOCALAPPDATA%"), "Piloto", "logs");
             Directory.CreateDirectory(pasta);
@@ -150,7 +156,7 @@ public partial class App : Application
 
     private void Encerrar()
     {
-        _log?.LogInformation("Encerrando o Piloto");
+        _log?.LogInformation("Encerrando o Click Write");
         Shutdown();
     }
 
@@ -158,7 +164,7 @@ public partial class App : Application
     {
         _log?.LogError(e.Exception, "Exceção não tratada na UI");
         MessageBox.Show("Ocorreu um erro inesperado:\n\n" + e.Exception.Message,
-            "Piloto", MessageBoxButton.OK, MessageBoxImage.Warning);
+            "Click Write", MessageBoxButton.OK, MessageBoxImage.Warning);
         e.Handled = true;
     }
 
@@ -167,7 +173,7 @@ public partial class App : Application
         try
         {
             // Marca encerramento limpo: sem esta linha no log, o processo morreu (crash).
-            _log?.LogInformation("Piloto encerrado normalmente");
+            _log?.LogInformation("Click Write encerrado normalmente");
             _tray?.Dispose();
             _provider?.DisposeAsync().AsTask().GetAwaiter().GetResult();
             _mutex?.Dispose();

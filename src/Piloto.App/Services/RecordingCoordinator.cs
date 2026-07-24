@@ -73,13 +73,7 @@ public sealed class RecordingCoordinator
         CallMetadata snapshot;
         lock (_lock)
         {
-            snapshot = new CallMetadata
-            {
-                Numero = _metadataCorrente.Numero,
-                TicketId = _metadataCorrente.TicketId,
-                Status = _metadataCorrente.Status,
-                Atendente = _metadataCorrente.Atendente,
-            };
+            snapshot = Copiar(_metadataCorrente);
         }
 
         _extensao.Iniciar(snapshot, taxa);
@@ -94,6 +88,7 @@ public sealed class RecordingCoordinator
         EstadoGravacaoMudou?.Invoke(this, false);
         if (captura is null) return;
 
+        CompletarMetadata(captura.Metadata);
         var id = _enqueuer.Enfileirar(captura);
         _log.LogInformation("Chamada enfileirada (item {Id}) — áudio capturado pela extensão", id);
         ChamadaEnfileirada?.Invoke(this, id);
@@ -111,6 +106,9 @@ public sealed class RecordingCoordinator
                 TicketId = meta.TicketId ?? _metadataCorrente.TicketId,
                 Status = meta.Status ?? _metadataCorrente.Status,
                 Atendente = meta.Atendente ?? _metadataCorrente.Atendente,
+                EmailCliente = meta.EmailCliente ?? _metadataCorrente.EmailCliente,
+                TelefoneCliente = meta.TelefoneCliente ?? _metadataCorrente.TelefoneCliente,
+                NomeCliente = meta.NomeCliente ?? _metadataCorrente.NomeCliente,
             };
         }
         MetadataMudou?.Invoke(this, EventArgs.Empty);
@@ -121,14 +119,8 @@ public sealed class RecordingCoordinator
         CallMetadata snapshot;
         lock (_lock)
         {
-            snapshot = new CallMetadata
-            {
-                Numero = _metadataCorrente.Numero,
-                TicketId = _metadataCorrente.TicketId,
-                Status = _metadataCorrente.Status,
-                Atendente = _metadataCorrente.Atendente,
-                IniciadaEm = DateTimeOffset.Now,
-            };
+            snapshot = Copiar(_metadataCorrente);
+            snapshot.IniciadaEm = DateTimeOffset.Now;
         }
         _recorder.Iniciar(snapshot);
     }
@@ -137,6 +129,7 @@ public sealed class RecordingCoordinator
     public long PararEEnfileirar()
     {
         var captura = _recorder.Parar();
+        CompletarMetadata(captura.Metadata);
         var id = _enqueuer.Enfileirar(captura);
         _log.LogInformation("Chamada enfileirada (item {Id})", id);
         LimparMetadata();
@@ -154,4 +147,40 @@ public sealed class RecordingCoordinator
         lock (_lock) _metadataCorrente = CallMetadata.Vazio();
         MetadataMudou?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// Completa, no encerramento, o que ainda estiver vazio no snapshot tirado no início.
+    /// O atendente frequentemente só abre o ticket do cliente DEPOIS de atender — e é aí
+    /// que o cartão do solicitante (e-mail, telefone, nome) aparece no DOM. Sem esta
+    /// passada, justamente o dado mais confiável da ligação ficava de fora por chegar
+    /// alguns segundos tarde demais.
+    /// <para>Só preenche o que está nulo: o valor capturado no início da chamada é o do
+    /// ticket certo, e não pode ser sobrescrito se o atendente já navegou para outro.</para>
+    /// </summary>
+    private void CompletarMetadata(CallMetadata destino)
+    {
+        lock (_lock)
+        {
+            destino.Numero ??= _metadataCorrente.Numero;
+            destino.TicketId ??= _metadataCorrente.TicketId;
+            destino.Status ??= _metadataCorrente.Status;
+            destino.Atendente ??= _metadataCorrente.Atendente;
+            destino.EmailCliente ??= _metadataCorrente.EmailCliente;
+            destino.TelefoneCliente ??= _metadataCorrente.TelefoneCliente;
+            destino.NomeCliente ??= _metadataCorrente.NomeCliente;
+        }
+    }
+
+    /// <summary>Snapshot dos metadados no instante em que a gravação começa: a extensão
+    /// continua atualizando <c>_metadataCorrente</c> enquanto a chamada corre.</summary>
+    private static CallMetadata Copiar(CallMetadata origem) => new()
+    {
+        Numero = origem.Numero,
+        TicketId = origem.TicketId,
+        Status = origem.Status,
+        Atendente = origem.Atendente,
+        EmailCliente = origem.EmailCliente,
+        TelefoneCliente = origem.TelefoneCliente,
+        NomeCliente = origem.NomeCliente,
+    };
 }

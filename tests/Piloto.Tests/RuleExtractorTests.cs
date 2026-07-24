@@ -119,6 +119,52 @@ public class RuleExtractorTests
     }
 
     [Fact]
+    public void MesmoTelefoneRepetidoNaConversaViraUmCampoSo()
+    {
+        // Antes, cada repetição virava uma linha: o painel enchia de valores idênticos
+        // e o atendente não sabia se eram números diferentes.
+        var campos = _rules.Extrair(TestData.Dialogo(
+            (Speaker.Cliente, "meu número é (11) 91234-5678"),
+            (Speaker.Atendente, "confirmando: 11912345678, correto?"),
+            (Speaker.Cliente, "isso, (11) 91234-5678")));
+
+        var tel = Assert.Single(campos.Telefones);
+        Assert.Equal("11912345678", tel.Valor);
+    }
+
+    [Fact]
+    public void DeduplicaOMesmoNumeroEscritoDeFormasDiferentes()
+    {
+        // "1134567890" e "(11) 3456-7890" são o mesmo telefone: a deduplicação compara
+        // os dígitos, não a grafia, e o campo sobrevive com a confiança da detecção.
+        var campos = _rules.Extrair(TestData.Dialogo(
+            (Speaker.Cliente, "anota 1134567890 aí"),
+            (Speaker.Atendente, "é (11) 3456-7890?")));
+
+        var tel = Assert.Single(campos.Telefones);
+        Assert.Equal("1134567890", tel.Valor);
+        Assert.True(tel.Confianca >= 0.85);
+    }
+
+    [Fact]
+    public void ValoresSaemOrdenadosPelaConfianca()
+    {
+        var campos = _rules.Extrair(TestData.Dialogo(
+            (Speaker.Cliente, "o antigo era 2133334444"),
+            (Speaker.Cliente, "o novo é (11) 91234-5678")));
+
+        Assert.Equal(2, campos.Telefones.Count);
+        Assert.True(campos.Telefones[0].Confianca >= campos.Telefones[1].Confianca);
+    }
+
+    [Fact]
+    public void CampoDaRegraNasceComOrigemRegra()
+    {
+        var campos = _rules.Extrair(TestData.Fala("manda pro joao.silva@empresa.com obrigado"));
+        Assert.Equal(FieldSource.Regra, Assert.Single(campos.Emails).Origem);
+    }
+
+    [Fact]
     public void TranscricaoVaziaNaoQuebra()
     {
         var campos = _rules.Extrair(Transcript.Vazio());

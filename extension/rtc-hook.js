@@ -8,7 +8,7 @@
 //
 // IMPORTANTE: precisa rodar em document_start para o patch acontecer ANTES de o
 // softphone criar a conexão. Se o softphone da 55PBX viver em outro domínio/iframe,
-// ajuste "matches" no manifest.json (procure no console do frame por "[Piloto] hook").
+// ajuste "matches" no manifest.json (procure no console do frame por "[Click Write] hook").
 
 (() => {
   'use strict';
@@ -83,7 +83,7 @@
     };
     postar({ tipo: 'call_started' });
     postar({ tipo: 'audio_inicio', taxa: TAXA_ALVO });
-    console.log('[Piloto] hook: sessão de captura iniciada');
+    console.log('[Click Write] hook: sessão de captura iniciada');
     return sessao;
   }
 
@@ -179,10 +179,10 @@
 
       info.fontes.set(track, { fonte, el, pc });
       track.addEventListener('ended', () => removerFonte(canal, track));
-      console.log('[Piloto] hook: canal "' + canal + '" + track (' +
+      console.log('[Click Write] hook: canal "' + canal + '" + track (' +
         info.fontes.size + ' fonte(s), frame: ' + location.origin + ')');
     } catch (e) {
-      console.warn('[Piloto] hook: falha ao anexar track', e);
+      console.warn('[Click Write] hook: falha ao anexar track', e);
     }
   }
 
@@ -238,13 +238,13 @@
         info.bus.disconnect(); info.aa1.disconnect(); info.aa2.disconnect();
         info.proc.disconnect(); info.mudo.disconnect();
       } catch (_) {}
-      console.log('[Piloto] hook: canal "' + canal + '" enviou ' +
+      console.log('[Click Write] hook: canal "' + canal + '" enviou ' +
         (info.enviadas / TAXA_ALVO).toFixed(1) + ' s de áudio');
     }
     try { s.ctx.close(); } catch (_) {}
     postar({ tipo: 'audio_fim' });
     postar({ tipo: 'call_ended' });
-    console.log('[Piloto] hook: sessão de captura encerrada');
+    console.log('[Click Write] hook: sessão de captura encerrada');
   }
 
   // ------------------------------------------------------------ patches
@@ -320,5 +320,5 @@
   window.RTCPeerConnection = Patched;
   if (window.webkitRTCPeerConnection) window.webkitRTCPeerConnection = Patched;
 
-  console.log('[Piloto] hook de WebRTC ativo em ' + location.origin);
+  console.log('[Click Write] hook de WebRTC ativo em ' + location.origin);
 })();

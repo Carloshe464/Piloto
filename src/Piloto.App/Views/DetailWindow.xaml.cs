@@ -1,5 +1,6 @@
 using System.Text;
 using System.Windows;
+using System.Windows.Controls;
 using Microsoft.Win32;
 using Piloto.App.ViewModels;
 using Piloto.Core.Abstractions;
@@ -28,9 +29,17 @@ public partial class DetailWindow : Window
         var m = _registro.Metadata;
         TxtCabecalho.Text = $"Ligação #{_registro.Id}";
         TxtChipData.Text = _registro.CriadoEm.LocalDateTime.ToString("dd/MM/yyyy HH:mm");
-        TxtChipNumero.Text = string.IsNullOrWhiteSpace(m.Numero) ? "—" : PiiMasker.Mascarar(m.Numero);
+        // Sem máscara: é o número da ligação que o atendente confere e copia. A máscara
+        // vale para o que sai do app (exportação), não para a tela interna.
+        TxtChipNumero.Text = Ou(m.Numero, "—");
         TxtChipTicket.Text = m.TicketId ?? "—";
         TxtChipDuracao.Text = _registro.Duracao.ToString(@"hh\:mm\:ss");
+
+        // Nome do solicitante só aparece quando a extensão conseguiu lê-lo do Zendesk.
+        TxtChipCliente.Text = m.NomeCliente ?? "";
+        ChipCliente.Visibility = string.IsNullOrWhiteSpace(m.NomeCliente)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
 
         if (_registro.PrecisaRevisao)
         {
@@ -46,7 +55,7 @@ public partial class DetailWindow : Window
         TxtPedido.Text = Ou(PiiMasker.Mascarar(r.Pedido));
         TxtProximo.Text = Ou(PiiMasker.Mascarar(r.ProximoPasso));
 
-        TxtCampos.Text = MontarCampos();
+        PreencherCampos();
         PreencherDialogo();
     }
 
@@ -66,24 +75,33 @@ public partial class DetailWindow : Window
         TxtDialogoVazio.Visibility = linhas.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private string MontarCampos()
+    /// <summary>
+    /// Monta a aba "Dados extraídos" <b>sem máscara</b>. A máscara existe para o que SAI
+    /// do app (exportação, via <c>ChkMascarar</c>); aqui dentro ela só destruía o dado:
+    /// um telefone exibido como "*******5678" e um e-mail como "j***@x.com" não servem
+    /// para o cadastro nem para conferir se a transcrição acertou — que é exatamente o
+    /// que esta aba existe para permitir. O mesmo raciocínio que já valia para CPF/CNPJ.
+    /// </summary>
+    private void PreencherCampos()
     {
-        var sb = new StringBuilder();
-        void Linha(string titulo, IReadOnlyList<ExtractedValue> vs, bool mascarar = true)
+        ListaCampos.ItemsSource = _registro.Campos.PorCategoria()
+            .Select(c => new CategoriaCampoVm
+            {
+                Titulo = c.Titulo,
+                Valores = c.Valores.Select(CampoExtraidoVm.De).ToList(),
+            })
+            .ToList();
+    }
+
+    private void CopiarCampo_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string valor } botao || string.IsNullOrEmpty(valor)) return;
+        try
         {
-            var texto = vs.Count == 0
-                ? "Não identificado"
-                : string.Join("; ", vs.Select(v => $"{(mascarar ? PiiMasker.Mascarar(v.Valor) : v.Valor)} ({v.Confianca:P0})"));
-            sb.AppendLine($"{titulo}: {texto}");
+            Clipboard.SetText(valor);
+            botao.Content = "Copiado ✓";
         }
-        Linha("Telefones", _registro.Campos.Telefones);
-        // CPF/CNPJ sem máscara: é o dado que o atendente copia para o cadastro.
-        Linha("CPF/CNPJ", _registro.Campos.Cpfs, mascarar: false);
-        Linha("E-mails", _registro.Campos.Emails);
-        Linha("Datas", _registro.Campos.Datas);
-        Linha("Valores", _registro.Campos.Valores);
-        Linha("Protocolos", _registro.Campos.Protocolos);
-        return sb.ToString().TrimEnd();
+        catch { /* clipboard ocupado por outro app — ignora */ }
     }
 
     private void ExportarTxt_Click(object sender, RoutedEventArgs e) => Exportar(ExportFormat.Txt, "txt");
@@ -103,12 +121,12 @@ public partial class DetailWindow : Window
         {
             var conteudo = _exporter.Exportar(_registro, formato, ChkMascarar.IsChecked == true);
             File.WriteAllText(dlg.FileName, conteudo, new UTF8Encoding(true));
-            MessageBox.Show("Exportado para:\n" + dlg.FileName, "Piloto",
+            MessageBox.Show("Exportado para:\n" + dlg.FileName, "Click Write",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Falha ao exportar:\n\n" + ex.Message, "Piloto",
+            MessageBox.Show("Falha ao exportar:\n\n" + ex.Message, "Click Write",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -136,27 +154,27 @@ public partial class DetailWindow : Window
         if (!temAudio)
         {
             MessageBox.Show("O áudio desta ligação não está mais no disco (retenção) — não dá para reprocessar.",
-                "Piloto", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Click Write", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         var resposta = MessageBox.Show(
             "Reprocessar esta ligação a partir do áudio?\n\n" +
             "A transcrição, os campos e o resumo atuais serão substituídos pelo novo resultado.",
-            "Piloto", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            "Click Write", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (resposta != MessageBoxResult.Yes) return;
 
         try
         {
             _enqueuer.Reprocessar(_registro);
             MessageBox.Show("Ligação reenfileirada — será reprocessada em segundo plano.",
-                "Piloto", MessageBoxButton.OK, MessageBoxImage.Information);
+                "Click Write", MessageBoxButton.OK, MessageBoxImage.Information);
             Close();
         }
         catch (Exception ex)
         {
             MessageBox.Show("Falha ao reenfileirar:\n\n" + ex.Message,
-                "Piloto", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Click Write", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

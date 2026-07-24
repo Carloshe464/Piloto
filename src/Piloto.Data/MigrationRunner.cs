@@ -63,6 +63,14 @@ internal static class MigrationRunner
             tokenize = 'unicode61 remove_diacritics 2'
         );
         """,
+
+        // v2 — contato do solicitante lido do cadastro do Zendesk pela extensão.
+        // Registros antigos ficam com NULL: o app trata como "não informado".
+        """
+        ALTER TABLE calls ADD COLUMN email_cliente    TEXT;
+        ALTER TABLE calls ADD COLUMN telefone_cliente TEXT;
+        ALTER TABLE calls ADD COLUMN nome_cliente     TEXT;
+        """,
     };
 
     public static void Aplicar(SqliteConnection conn)

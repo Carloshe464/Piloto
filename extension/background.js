@@ -28,13 +28,13 @@ async function conectar() {
   try {
     socket = new WebSocket(`ws://127.0.0.1:${porta}`);
     socket.addEventListener('open', () => {
-      console.log('[Piloto] conectado ao app');
+      console.log('[Click Write] conectado ao app');
       if (ultimaMensagem) enviar(ultimaMensagem);
     });
     socket.addEventListener('close', () => { socket = null; });
     socket.addEventListener('error', () => { try { socket && socket.close(); } catch (_) {} socket = null; });
   } catch (e) {
-    console.warn('[Piloto] falha ao conectar', e);
+    console.warn('[Click Write] falha ao conectar', e);
     socket = null;
   }
 }
@@ -45,7 +45,7 @@ function enviar(obj, lembrar = true) {
   if (lembrar) ultimaMensagem = obj;
   if (socket && socket.readyState === WebSocket.OPEN) {
     try { socket.send(JSON.stringify(obj)); return true; }
-    catch (e) { console.warn('[Piloto] falha ao enviar', e); }
+    catch (e) { console.warn('[Click Write] falha ao enviar', e); }
   }
   conectar();
   return false;
@@ -66,7 +66,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg?.tipo === 'status') {
-    sendResponse({ estado: estado() });
+    // Devolve também o último metadado lido: é como o popup mostra, na máquina do
+    // atendente, se os seletores do DOM ainda estão pegando (eles quebram quando o
+    // Zendesk muda o layout — o ponto de manutenção citado no README).
+    sendResponse({ estado: estado(), ultimo: ultimaMensagem });
     return true;
   }
 });

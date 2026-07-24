@@ -65,7 +65,7 @@ public partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Não foi possível abrir a pasta:\n" + ex.Message, "Piloto",
+            MessageBox.Show("Não foi possível abrir a pasta:\n" + ex.Message, "Click Write",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -100,7 +100,7 @@ public partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Falha ao salvar:\n\n" + ex.Message, "Piloto",
+            MessageBox.Show("Falha ao salvar:\n\n" + ex.Message, "Click Write",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }

@@ -40,5 +40,5 @@ Write-Passo "Inno Setup: $iscc"
 & $iscc (Join-Path $raiz 'installer\setup.iss')
 
 Write-Passo 'Instalador gerado em installer\Output\'
-Get-ChildItem (Join-Path $raiz 'installer\Output') -Filter 'PilotoSetup-*.exe' -ErrorAction SilentlyContinue |
+Get-ChildItem (Join-Path $raiz 'installer\Output') -Filter 'ClickWriteSetup-*.exe' -ErrorAction SilentlyContinue |
     Format-Table Name, @{N='MB';E={[math]::Round($_.Length/1MB,1)}} -AutoSize

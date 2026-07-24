@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Piloto — Ponte Zendesk",
-  "version": "0.3.1",
-  "description": "Lê metadados da ligação no Zendesk e captura o áudio da chamada (WebRTC do softphone 55PBX), enviando ao app Piloto via WebSocket local (127.0.0.1).",
+  "name": "Click Write — Ponte Zendesk",
+  "version": "1.0.0",
+  "description": "Lê metadados e o contato do solicitante (e-mail, telefone) no Zendesk e captura o áudio da chamada (WebRTC do softphone 55PBX), enviando ao app Click Write via WebSocket local (127.0.0.1).",
   "permissions": ["storage", "alarms"],
   "host_permissions": [
     "*://*.zendesk.com/*",
@@ -34,6 +34,6 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Piloto — Ponte Zendesk"
+    "default_title": "Click Write — Ponte Zendesk"
   }
 }
