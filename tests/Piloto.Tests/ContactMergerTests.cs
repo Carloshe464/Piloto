@@ -113,6 +113,60 @@ public class ContactMergerTests
     }
 
     [Fact]
+    public void NomeDoCadastroViraCampoObjetivo()
+    {
+        // O servidor já devolve `campos.nomes`; sem a categoria aqui, o dado chegava e não
+        // tinha onde pousar. Não há extração de nome a partir da fala — esta é a única fonte.
+        var campos = ObjectiveFields.Vazio();
+        ContactMerger.Aplicar(campos, new CallMetadata { NomeCliente = "  Vinicius   Ferreira " });
+
+        var nome = Assert.Single(campos.Nomes);
+        Assert.Equal("Vinicius Ferreira", nome.Valor);   // grafia do cadastro preservada
+        Assert.Equal(FieldType.Nome, nome.Tipo);
+        Assert.Equal(FieldSource.Extensao, nome.Origem);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("-")]      // lixo do DOM
+    [InlineData("1")]
+    public void NomeImplausivelDoDomNaoViraCampo(string bruto)
+    {
+        var campos = ObjectiveFields.Vazio();
+        ContactMerger.Aplicar(campos, new CallMetadata { NomeCliente = bruto });
+
+        Assert.Empty(campos.Nomes);
+    }
+
+    [Fact]
+    public void TicketDoZendeskEntraNosProtocolos()
+    {
+        // O app conhecia o ticket desde o primeiro segundo e a aba "Dados extraídos"
+        // mostrava "Protocolos: não identificado".
+        var campos = ObjectiveFields.Vazio();
+        ContactMerger.Aplicar(campos, new CallMetadata { TicketId = "SUP-88213" });
+
+        var ticket = Assert.Single(campos.Protocolos);
+        Assert.Equal("SUP-88213", ticket.Valor);
+        Assert.Equal(FieldSource.Extensao, ticket.Origem);
+    }
+
+    [Fact]
+    public void TicketDitadoNaLigacaoPerdeParaODoCadastro()
+    {
+        var campos = _rules.Extrair(TestData.Fala("anota aí o protocolo 882130 por favor"));
+        Assert.Equal(FieldSource.Regra, Assert.Single(campos.Protocolos).Origem);
+
+        ContactMerger.Aplicar(campos, new CallMetadata { TicketId = "SUP-882130" });
+
+        // Mesmo número, uma linha só — e a que sobrevive é a do cadastro.
+        var ticket = Assert.Single(campos.Protocolos);
+        Assert.Equal(FieldSource.Extensao, ticket.Origem);
+        Assert.Equal("SUP-882130", ticket.Valor);
+    }
+
+    [Fact]
     public void AplicarDuasVezesNaoDuplica()
     {
         // O reprocessamento a partir do áudio roda o pipeline de novo sobre o mesmo

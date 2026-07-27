@@ -2,7 +2,7 @@
 ; Gera installer\Output\ClickWriteSetup-<versao>.exe. Rode via scripts\build-installer.ps1 ou no CI.
 
 #define MyAppName "Click Write"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Click Write"
 #define MyAppExeName "ClickWrite.exe"
 ; Nome anterior do produto (até a 0.7.x). A 1.0 instala por cima dela e precisa saber
@@ -67,10 +67,10 @@ Source: "..\scripts\monitor-logs.ps1"; DestDir: "{app}\scripts"; Flags: ignoreve
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\Baixar modelos (Whisper + Gemma)"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
+Name: "{group}\Baixar modelo de resumo (Gemma)"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
   Parameters: "-NoExit -ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\download-models.ps1"""; \
   WorkingDir: "{app}\scripts"; \
-  Comment: "Baixa os modelos para %LOCALAPPDATA%\Piloto\models"
+  Comment: "Baixa o modelo de resumo para %LOCALAPPDATA%\Piloto\models (a transcrição roda no servidor)"
 Name: "{group}\{#MyAppName} — Logs ao vivo"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
   Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\monitor-logs.ps1"""; \
   WorkingDir: "{app}\scripts"; \
@@ -89,14 +89,13 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
 
 [Run]
 ; Entradas postinstall viram checkboxes na última tela do assistente e rodam como o
-; usuário original (não elevado) — os modelos caem no %LOCALAPPDATA% do usuário certo.
-; Os modelos (~2,6 GB) não são embutidos no setup: o GitHub Releases limita artefatos
-; a 2 GB e cada atualização reenviaria tudo; em máquinas sem internet, use o atalho
-; "Baixar modelos" do menu Iniciar em outra máquina e copie a pasta manualmente.
+; usuário original (não elevado) — o modelo cai no %LOCALAPPDATA% do usuário certo.
+; A TRANSCRIÇÃO não baixa mais nada: roda no servidor. Sobra o modelo de resumo
+; (~2,4 GB), que também remove os modelos Whisper que versões anteriores deixaram.
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
   Parameters: "-NoExit -ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\download-models.ps1"""; \
   WorkingDir: "{app}\scripts"; \
-  Description: "Baixar os modelos de IA agora (~2,6 GB — requer internet)"; \
+  Description: "Baixar o modelo de resumo agora (~2,4 GB — requer internet)"; \
   Flags: nowait postinstall skipifsilent
 Filename: "{app}\{#MyAppExeName}"; Description: "Executar o {#MyAppName} agora"; \
   Flags: nowait postinstall skipifsilent

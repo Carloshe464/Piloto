@@ -26,7 +26,7 @@ public static class ContactMerger
         @"^[^@\s]+@[^@\s.]+\.[^@\s]+$", RegexOptions.Compiled);
 
     /// <summary>
-    /// Acrescenta e-mail, telefone e o número do discador aos campos objetivos.
+    /// Acrescenta e-mail, telefone, número do discador, nome e ticket aos campos objetivos.
     /// Idempotente: chamar duas vezes não duplica nada (a mesclagem compara o conteúdo).
     /// </summary>
     public static void Aplicar(ObjectiveFields campos, CallMetadata metadata)
@@ -65,7 +65,52 @@ public static class ContactMerger
                 Origem = FieldSource.Extensao,
             });
 
+        // Nome do solicitante. Não existe extração de nome a partir da fala — nem aqui nem
+        // no servidor —, então esta é a única fonte: ou vem do cadastro, ou não vem.
+        if (NormalizarNome(metadata.NomeCliente) is { } nome)
+            ObjectiveFields.Mesclar(campos.Nomes, new ExtractedValue
+            {
+                Tipo = FieldType.Nome,
+                Valor = nome,
+                TrechoOrigem = "cadastro do Zendesk",
+                Confianca = 1.0,
+                Origem = FieldSource.Extensao,
+            });
+
+        // O ticket já vinha no cabeçalho do registro e ficava fora dos campos: o atendente
+        // via "Protocolos: não identificado" numa ligação que tinha ticket desde o início.
+        if (NormalizarTexto(metadata.TicketId) is { } ticket)
+            ObjectiveFields.Mesclar(campos.Protocolos, new ExtractedValue
+            {
+                Tipo = FieldType.Protocolo,
+                Valor = ticket,
+                TrechoOrigem = "ticket do Zendesk",
+                Confianca = 1.0,
+                Origem = FieldSource.Extensao,
+            });
+
         campos.Ordenar();
+    }
+
+    /// <summary>
+    /// Nome plausível vindo do DOM: preserva a grafia do cadastro (é assim que o atendente
+    /// vai copiar), mas recusa rótulo e lixo — precisa ter letra e ao menos dois caracteres.
+    /// </summary>
+    private static string? NormalizarNome(string? bruto)
+    {
+        var t = ColapsarEspacos(bruto);
+        if (t is null || t.Length < 2) return null;
+        return t.Any(char.IsLetter) ? t : null;
+    }
+
+    /// <summary>Texto do cadastro usado como valor (ticket): só limpa espaços.</summary>
+    private static string? NormalizarTexto(string? bruto) => ColapsarEspacos(bruto);
+
+    private static string? ColapsarEspacos(string? bruto)
+    {
+        if (string.IsNullOrWhiteSpace(bruto)) return null;
+        var t = string.Join(' ', bruto.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return t.Length == 0 ? null : t;
     }
 
     /// <summary>Devolve o e-mail em minúsculas, ou null se não parecer um e-mail.</summary>

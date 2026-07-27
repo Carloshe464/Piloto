@@ -71,6 +71,18 @@ internal static class MigrationRunner
         ALTER TABLE calls ADD COLUMN telefone_cliente TEXT;
         ALTER TABLE calls ADD COLUMN nome_cliente     TEXT;
         """,
+
+        // v3 — migração para o servidor de transcrição.
+        //   ligacao_id           identidade estável da ligação; é a Idempotency-Key do envio.
+        //                        Persistida porque precisa sobreviver ao reinício do app —
+        //                        é aí que o piloto não sabe se o envio anterior chegou.
+        //   proxima_tentativa_em recuo depois de uma falha transitória (servidor fora do ar).
+        // Itens antigos ficam com NULL: sem ligacao_id, o processador deriva um do id do
+        // item; sem proxima_tentativa_em, o item é elegível agora — que é o que era antes.
+        """
+        ALTER TABLE queue ADD COLUMN ligacao_id           TEXT;
+        ALTER TABLE queue ADD COLUMN proxima_tentativa_em TEXT;
+        """,
     };
 
     public static void Aplicar(SqliteConnection conn)

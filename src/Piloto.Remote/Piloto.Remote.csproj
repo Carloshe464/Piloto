@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Piloto.Remote</RootNamespace>
+    <AssemblyName>Piloto.Remote</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Sem pacote de HTTP nem de JSON: System.Net.Http e System.Text.Json fazem parte
+         do framework compartilhado do net8.0. O cliente do servidor não traz dependência
+         nova para o instalador. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Piloto.Core\Piloto.Core.csproj" />
+  </ItemGroup>
+
+</Project>

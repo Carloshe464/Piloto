@@ -11,7 +11,7 @@ public sealed class AppSettings
 {
     public BridgeSettings Bridge { get; set; } = new();
     public AudioSettings Audio { get; set; } = new();
-    public WhisperSettings Whisper { get; set; } = new();
+    public ServidorSettings Servidor { get; set; } = new();
     public LlmSettings Llm { get; set; } = new();
     public FilaSettings Fila { get; set; } = new();
     public RetencaoSettings RetencaoDias { get; set; } = new();
@@ -31,9 +31,6 @@ public sealed class AppSettings
 
     [JsonIgnore]
     public string CaminhoBanco => Path.Combine(PastaDadosExpandida, "piloto.db");
-
-    [JsonIgnore]
-    public string CaminhoModeloWhisper => Path.Combine(PastaModelos, Whisper.Modelo);
 
     [JsonIgnore]
     public string CaminhoModeloLlm => Path.Combine(PastaModelos, Llm.Modelo);
@@ -81,13 +78,29 @@ public sealed class AudioSettings
     public int TaxaHz { get; set; } = 16000;
 }
 
-public sealed class WhisperSettings
+/// <summary>
+/// Servidor de transcrição. O trabalho pesado (Whisper, e mais adiante a análise e o
+/// resumo) roda lá; o piloto envia os dois canais e exibe o que volta.
+/// <para>
+/// A URL e o token são <b>configuração</b>, nunca constante compilada: um token por
+/// máquina permite revogar uma sem mexer nas outras.
+/// </para>
+/// </summary>
+public sealed class ServidorSettings
 {
-    public string Modelo { get; set; } = "ggml-small-q5_1.bin";
-    public string Idioma { get; set; } = "pt";
+    public string Url { get; set; } = "http://DESKTOP-VEP5JQ3:8600";
 
-    /// <summary>0 = automático (metade dos threads lógicos da máquina, entre 2 e 8).</summary>
-    public int Threads { get; set; } = 0;
+    /// <summary>Bearer token (<c>CW_TOKENS</c> no servidor). Vazio = servidor sem autenticação.</summary>
+    public string Token { get; set; } = "";
+
+    /// <summary>Teto de uma requisição HTTP. Precisa ser maior que os 120 s do long-poll —
+    /// e folgado o bastante para o upload de uma ligação longa (90 min ≈ 170 MB).</summary>
+    public int TimeoutSegundos { get; set; } = 300;
+
+    /// <summary>Tentativas antes de a ligação ir para revisão. Falha de rede <b>não</b>
+    /// consome tentativa (ver <c>QueueProcessor</c>): só recusa do servidor e erro de
+    /// processamento contam.</summary>
+    public int MaxTentativas { get; set; } = 3;
 }
 
 public sealed class LlmSettings
@@ -108,8 +121,10 @@ public sealed class LlmSettings
 
 public sealed class FilaSettings
 {
+    /// <summary>Uma ligação por vez. Existia porque duas passadas de Whisper na mesma
+    /// máquina se atropelavam; com o peso no servidor daria para subir, mas a idempotência
+    /// ainda não foi exercitada sob concorrência — sobe depois de campo, não antes.</summary>
     public int Simultaneas { get; set; } = 1;
-    public string PrioridadeProcesso { get; set; } = "BelowNormal";
 }
 
 public sealed class RetencaoSettings

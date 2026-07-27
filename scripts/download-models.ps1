@@ -1,26 +1,26 @@
 ﻿#requires -Version 5.1
 <#
 .SYNOPSIS
-    Baixa os modelos GGML (Whisper) e GGUF (LLM) para %LOCALAPPDATA%\Piloto\models.
+    Baixa o modelo GGUF (LLM, para o resumo) para %LOCALAPPDATA%\Piloto\models.
 .DESCRIPTION
-    Os modelos NÃO são versionados no Git (são grandes). Rode este script uma vez
-    na máquina onde o pipeline completo será testado. Em ambiente sem internet,
-    copie os arquivos manualmente para a pasta de destino exibida no final.
+    A TRANSCRIÇÃO NÃO USA MAIS MODELO LOCAL: ela roda no servidor (Whisper com GPU),
+    e o app só envia os dois canais de áudio. Este script cuida apenas do modelo de
+    resumo, que ainda é local — e remove os modelos Whisper que versões anteriores
+    baixaram (são centenas de MB que nunca mais serão usados).
+
+    Os modelos NÃO são versionados no Git (são grandes). Em ambiente sem internet,
+    copie o arquivo manualmente para a pasta de destino exibida no final.
 #>
 [CmdletBinding()]
 param(
     [string]$Destino = (Join-Path $env:LOCALAPPDATA 'Piloto\models'),
-    # auto: decide pela RAM (>= 7 GB -> turbo [large-v3-turbo, o melhor local]; menos -> small).
-    # O app usa em runtime o maior modelo presente que couber na memória.
-    [ValidateSet('auto', 'small', 'base', 'medium', 'turbo')]
-    [string]$Whisper = 'auto',
     # auto: decide pela RAM da máquina (>= 7 GB -> 4b; menos -> 1b). O app usa o que couber
     # na memória em runtime, então não é preciso ajustar o config ao baixar o 1b.
     # 4b: qualidade padrão (~2,4 GB; exige ~8 GB de RAM). 1b: máquinas com 4 GB (~0,8 GB).
     [ValidateSet('auto', '4b', '1b')]
     [string]$Llm = 'auto',
     [switch]$SemLlm,
-    # Pula a remoção de modelos obsoletos de versões anteriores.
+    # Pula a remoção de modelos obsoletos (inclusive os Whisper que a migração aposentou).
     [switch]$SemLimpeza
 )
 
@@ -34,29 +34,17 @@ function Write-Passo($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 # instável pode montar arquivo corrompido — e GGUF corrompido derruba o app na carga
 # nativa, sem erro legível. Todo arquivo é verificado: o existente antes de "pular", o
 # baixado antes de valer.
-$modelos = @{
-    'small' = @{
-        Nome = 'ggml-small-q5_1.bin'
-        Url  = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin'
-        Sha256 = 'ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb'
-    }
-    'base' = @{
-        Nome = 'ggml-base-q5_1.bin'
-        Url  = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin'
-        Sha256 = '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898'
-    }
-    'medium' = @{
-        Nome = 'ggml-medium-q5_0.bin'
-        Url  = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin'
-        Sha256 = '19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f'
-    }
-    # large-v3-turbo quantizado: qualidade de large com arquivo de ~570 MB — o teto local.
-    'turbo' = @{
-        Nome = 'ggml-large-v3-turbo-q5_0.bin'
-        Url  = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin'
-        Sha256 = '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2'
-    }
-}
+
+# Modelos Whisper que versões até a 1.0 baixavam. NÃO são mais baixados: a transcrição
+# roda no servidor. Os nomes ficam aqui só para a limpeza saber o que remover — sem esta
+# lista, os arquivos das máquinas já instaladas virariam "não gerenciados" e ficariam
+# ocupando disco para sempre (o uninstall não toca na pasta de modelos, por desenho).
+$whisperAposentado = @(
+    'ggml-small-q5_1.bin',
+    'ggml-base-q5_1.bin',
+    'ggml-medium-q5_0.bin',
+    'ggml-large-v3-turbo-q5_0.bin'
+)
 
 $llms = @{
     '4b' = @{
@@ -141,18 +129,8 @@ $ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemor
 
 # A RAM total engana: quem decide em runtime é a memória LIVRE com Chrome+Zendesk
 # abertos — nas máquinas da operação (12 GB) sobra ~1,3 GB e o Gemma 4B (~3,1 GB para
-# carregar) nunca cabe. Por isso o 'auto' baixa TAMBÉM o modelo pequeno de cada tipo:
-# é a rede de segurança para onde o app cai quando o grande não couber naquele momento.
-if ($Whisper -eq 'auto') {
-    $listaWhisper = if ($ramGb -ge 7) { @('turbo', 'small') } else { @('small') }
-    Write-Passo "RAM total: $ramGb GB -> Whisper $($listaWhisper -join ' + ')"
-}
-else { $listaWhisper = @($Whisper) }
-foreach ($chave in $listaWhisper) {
-    $m = $modelos[$chave]
-    Get-Modelo $m.Nome $m.Url $m.Sha256
-}
-
+# carregar) nunca cabe. Por isso o 'auto' baixa TAMBÉM o modelo pequeno: é a rede de
+# segurança para onde o app cai quando o grande não couber naquele momento.
 if (-not $SemLlm) {
     if ($Llm -eq 'auto') {
         $listaLlm = if ($ramGb -ge 7) { @('4b', '1b') } else { @('1b') }
@@ -168,20 +146,36 @@ else {
     Write-Passo 'LLM ignorado (-SemLlm).'
 }
 
+# --- modelos Whisper aposentados pela migração ------------------------------
+# Rodam SEMPRE (menos com -SemLimpeza), independentemente das opções de LLM: depois que
+# a transcrição foi para o servidor, esses arquivos não têm mais uso nenhum e são as
+# centenas de MB mais fáceis de recuperar em máquina de operação.
+if (-not $SemLimpeza) {
+    foreach ($nome in $whisperAposentado) {
+        $alvo = Join-Path $Destino $nome
+        if (Test-Path $alvo) {
+            $mb = [math]::Round((Get-Item $alvo).Length / 1MB, 1)
+            Write-Passo "Removendo modelo de transcrição local (agora no servidor): $nome ($mb MB)"
+            Remove-Item $alvo -Force
+        }
+        Remove-Item "$alvo.baixando" -Force -ErrorAction SilentlyContinue
+        Remove-Item "$alvo.integridade" -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # --- limpeza de modelos obsoletos -------------------------------------------
 # Atualização em cima de atualização acumula modelos de versões antigas: o uninstall
 # não toca na pasta de modelos (por desenho — são gigas baixados). Não é só disco:
 # o app escolhe modelo por tamanho ("maior = melhor"), então um legado maior que o
-# atual ganha a preferência e ocupa mais RAM à toa (ex.: medium de 539 MB competindo
-# com o turbo). Remove APENAS nomes que alguma versão deste script já baixou — arquivo
-# desconhecido (modelo colocado manualmente) é preservado com aviso. Roda depois dos
-# downloads (nunca deixa a máquina sem modelo se um download falhar) e só no modo
-# 'auto', em que o conjunto desejado é o curado; escolha explícita não apaga nada.
-if (-not $SemLimpeza -and $Whisper -eq 'auto' -and ($SemLlm -or $Llm -eq 'auto')) {
-    $conhecidos = @($modelos.Values | ForEach-Object { $_.Nome })
+# atual ganha a preferência e ocupa mais RAM à toa. Remove APENAS nomes que alguma
+# versão deste script já baixou — arquivo desconhecido (modelo colocado manualmente) é
+# preservado com aviso. Roda depois dos downloads (nunca deixa a máquina sem modelo se
+# um download falhar) e só no modo 'auto', em que o conjunto desejado é o curado.
+if (-not $SemLimpeza -and ($SemLlm -or $Llm -eq 'auto')) {
+    $conhecidos = @($whisperAposentado)
     if (-not $SemLlm) { $conhecidos += @($llms.Values | ForEach-Object { $_.Nome }) }
 
-    $desejados = @($listaWhisper | ForEach-Object { $modelos[$_].Nome })
+    $desejados = @()
     if (-not $SemLlm) { $desejados += @($listaLlm | ForEach-Object { $llms[$_].Nome }) }
 
     Get-ChildItem $Destino -File | ForEach-Object {

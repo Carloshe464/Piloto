@@ -13,10 +13,4 @@ public static class Hardware
     /// </summary>
     public static int ResolverThreads(int configurado)
         => configurado > 0 ? configurado : Math.Clamp(Environment.ProcessorCount / 2, 2, 8);
-
-    /// <summary>
-    /// CPUs com menos de 8 threads lógicos não pagam o beam search (~2x mais lento)
-    /// sem atrasar a fila de forma perceptível — nelas, greedy com o mesmo modelo.
-    /// </summary>
-    public static bool CpuComportaBeam => Environment.ProcessorCount >= 8;
 }

@@ -7,6 +7,12 @@ public enum FieldType
     Cpf,
     Cnpj,
     Email,
+
+    /// <summary>Nome do cliente. Vem <b>sempre</b> do cadastro do Zendesk (campo
+    /// <c>nomes</c> do servidor, ou <c>metadados.nomeCliente</c> aqui) — não há extração
+    /// de nome a partir da fala, e não deve haver: nome ouvido é palpite.</summary>
+    Nome,
+
     Data,
     Valor,
     Protocolo,
@@ -61,12 +67,17 @@ public sealed class ObjectiveFields
     /// JSON persistido; o <see cref="ExtractedValue.Tipo"/> distingue os dois.</summary>
     public List<ExtractedValue> Cpfs { get; init; } = new();
     public List<ExtractedValue> Emails { get; init; } = new();
+
+    /// <summary>Nomes do cadastro (servidor: <c>campos.nomes</c>). Lista nova: o JSON já
+    /// persistido, que não a tem, desserializa vazia — sem migração.</summary>
+    public List<ExtractedValue> Nomes { get; init; } = new();
+
     public List<ExtractedValue> Datas { get; init; } = new();
     public List<ExtractedValue> Valores { get; init; } = new();
     public List<ExtractedValue> Protocolos { get; init; } = new();
 
     public IEnumerable<ExtractedValue> Todos()
-        => Telefones.Concat(Cpfs).Concat(Emails).Concat(Datas).Concat(Valores).Concat(Protocolos);
+        => Telefones.Concat(Cpfs).Concat(Emails).Concat(Nomes).Concat(Datas).Concat(Valores).Concat(Protocolos);
 
     /// <summary>Todas as listas, na ordem em que aparecem na tela e nas exportações.</summary>
     public IEnumerable<(string Titulo, List<ExtractedValue> Valores)> PorCategoria()
@@ -74,6 +85,7 @@ public sealed class ObjectiveFields
         yield return ("Telefones", Telefones);
         yield return ("CPF/CNPJ", Cpfs);
         yield return ("E-mails", Emails);
+        yield return ("Nomes", Nomes);
         yield return ("Datas", Datas);
         yield return ("Valores", Valores);
         yield return ("Protocolos", Protocolos);
@@ -113,12 +125,12 @@ public sealed class ObjectiveFields
         => (v.Origem == FieldSource.Extensao ? 10 : 0) + v.Confianca;
 
     /// <summary>Identidade do valor para deduplicação: compara o conteúdo, não a grafia.
-    /// "(11) 91234-5678" e "11912345678" são o mesmo telefone; e-mail ignora caixa.</summary>
+    /// "(11) 91234-5678" e "11912345678" são o mesmo telefone; e-mail e nome ignoram caixa.</summary>
     private static string Chave(ExtractedValue v) => v.Tipo switch
     {
         FieldType.Telefone or FieldType.Cpf or FieldType.Cnpj or FieldType.Protocolo
             => new string(v.Valor.Where(char.IsDigit).ToArray()),
-        FieldType.Email => v.Valor.Trim().ToLowerInvariant(),
+        FieldType.Email or FieldType.Nome => v.Valor.Trim().ToLowerInvariant(),
         _ => v.Valor.Trim(),
     };
 

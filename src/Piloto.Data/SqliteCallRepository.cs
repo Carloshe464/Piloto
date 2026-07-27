@@ -52,9 +52,10 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
         {
             using var cmd = Conn.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO queue (audio_atendente, audio_cliente, metadata_json, estado, tentativas, criado_em, registro_id)
-                VALUES ($aa, $ac, $meta, $estado, 0, $criado, $reg);
+                INSERT INTO queue (audio_atendente, audio_cliente, metadata_json, estado, tentativas, criado_em, registro_id, ligacao_id)
+                VALUES ($aa, $ac, $meta, $estado, 0, $criado, $reg, $ligacao);
                 """;
+            cmd.Parameters.AddWithValue("$ligacao", (object?)item.LigacaoId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$aa", item.CaminhoAudioAtendente);
             cmd.Parameters.AddWithValue("$ac", item.CaminhoAudioCliente);
             cmd.Parameters.AddWithValue("$meta", (object?)item.MetadataJson ?? DBNull.Value);
@@ -75,11 +76,15 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
         lock (_lock)
         {
             using var cmd = Conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT id, audio_atendente, audio_cliente, metadata_json, estado, tentativas, ultimo_erro, criado_em, atualizado_em, registro_id
-                FROM queue WHERE estado = $pendente ORDER BY id ASC LIMIT 1;
+            // Item em recuo (servidor fora do ar) não é elegível ainda: sem este filtro, a
+            // fila reenviaria a cada 3 s e o log viraria uma parede de tentativas idênticas.
+            cmd.CommandText = ColunasQueue + """
+                 WHERE estado = $pendente
+                   AND (proxima_tentativa_em IS NULL OR proxima_tentativa_em <= $agora)
+                 ORDER BY id ASC LIMIT 1;
                 """;
             cmd.Parameters.AddWithValue("$pendente", (int)QueueState.Pendente);
+            cmd.Parameters.AddWithValue("$agora", Iso(DateTimeOffset.Now));
             using var r = cmd.ExecuteReader();
             return r.Read() ? LerQueueItem(r) : null;
         }
@@ -92,9 +97,13 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
             using var cmd = Conn.CreateCommand();
             cmd.CommandText = """
                 UPDATE queue SET estado=$estado, tentativas=$tent, ultimo_erro=$erro,
-                    atualizado_em=$atualizado, registro_id=$reg
+                    atualizado_em=$atualizado, registro_id=$reg,
+                    ligacao_id=$ligacao, proxima_tentativa_em=$proxima
                 WHERE id=$id;
                 """;
+            cmd.Parameters.AddWithValue("$ligacao", (object?)item.LigacaoId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$proxima",
+                (object?)(item.ProximaTentativaEm is { } p ? Iso(p) : null) ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$estado", (int)item.Estado);
             cmd.Parameters.AddWithValue("$tent", item.Tentativas);
             cmd.Parameters.AddWithValue("$erro", (object?)item.UltimoErro ?? DBNull.Value);
@@ -127,7 +136,8 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
                     tentativas = tentativas + 1,
                     ultimo_erro = $motivo,
                     estado = CASE WHEN tentativas + 1 >= $max THEN $erro ELSE $pendente END,
-                    atualizado_em = $agora
+                    atualizado_em = $agora,
+                    proxima_tentativa_em = NULL
                 WHERE estado = $processando;
                 """;
             cmd.Parameters.AddWithValue("$motivo", "Processo encerrado inesperadamente durante o processamento");
@@ -145,10 +155,7 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
         lock (_lock)
         {
             using var cmd = Conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT id, audio_atendente, audio_cliente, metadata_json, estado, tentativas, ultimo_erro, criado_em, atualizado_em, registro_id
-                FROM queue WHERE estado = $erro AND registro_id IS NULL ORDER BY id ASC;
-                """;
+            cmd.CommandText = ColunasQueue + " WHERE estado = $erro AND registro_id IS NULL ORDER BY id ASC;";
             cmd.Parameters.AddWithValue("$erro", (int)QueueState.Erro);
             using var r = cmd.ExecuteReader();
             var lista = new List<QueueItem>();
@@ -482,6 +489,15 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
 
     // ---------------------------------------------------------------- Helpers
 
+    /// <summary>Colunas da fila na ordem lida por <see cref="LerQueueItem"/> — as novas
+    /// entram sempre no fim, para não deslocar os índices já usados.</summary>
+    private const string ColunasQueue = """
+        SELECT id, audio_atendente, audio_cliente, metadata_json, estado, tentativas,
+               ultimo_erro, criado_em, atualizado_em, registro_id,
+               ligacao_id, proxima_tentativa_em
+        FROM queue
+        """;
+
     private const string SelectCalls = """
         SELECT id, uuid, numero, ticket, status_zendesk, atendente, iniciada_em, encerrada_em, criado_em,
                duracao_seg, tempo_falado_seg, audio_atendente, audio_cliente,
@@ -510,6 +526,8 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
         CriadoEm = ParseDto(r.GetString(7)),
         AtualizadoEm = r.IsDBNull(8) ? null : ParseDto(r.GetString(8)),
         RegistroId = r.IsDBNull(9) ? null : r.GetInt64(9),
+        LigacaoId = r.IsDBNull(10) ? null : r.GetString(10),
+        ProximaTentativaEm = r.IsDBNull(11) ? null : ParseDto(r.GetString(11)),
     };
 
     private static CallRecord LerCallRecord(SqliteDataReader r)

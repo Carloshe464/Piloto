@@ -1,6 +1,11 @@
-# Click Write — Transcrição Local de Ligações (Zendesk)
+# Click Write — Transcrição de Ligações (Zendesk)
 
-Aplicativo Windows que grava as ligações atendidas pelo discador web do Zendesk, transcreve localmente com Whisper e gera registros estruturados (resumo, motivo, pedido, campos objetivos) — **sem enviar áudio ou texto para nenhuma API externa**.
+Aplicativo Windows que grava as ligações atendidas pelo discador web do Zendesk, envia os dois canais ao **servidor de transcrição da própria operação** e gera registros estruturados (resumo, motivo, pedido, campos objetivos) — **sem enviar áudio ou texto para nenhuma API externa**.
+
+> **Onde o áudio vai.** A transcrição saiu da máquina do atendente e passou a rodar num
+> servidor da rede interna (Whisper com GPU), acessado por HTTP com token por máquina. O
+> áudio continua não saindo da infraestrutura da operação — mas **sai da máquina**, o que
+> antes não acontecia. O servidor não persiste nada: o resultado vive 15 minutos e some.
 
 > **Status:** 1.0. Hardware de referência: Intel Core i5 10ª geração, 12 GB RAM, SSD, Windows 10/11 64 bits.
 
@@ -29,7 +34,10 @@ Extensão Chrome/Edge lê o DOM do Zendesk → número, ticket, status
         ↓
 Chamada encerrada → par de arquivos entra na fila (1 por vez, SQLite)
         ↓
-Whisper (small, quantizado) transcreve cada canal — task=transcribe, language=pt
+Envio ao SERVIDOR: os dois canais + metadados + listas fechadas + glossário
+  (multipart, Idempotency-Key = ligacaoId; servidor fora do ar = reenvio, nunca descarte)
+        ↓
+Servidor transcreve cada canal — task=transcribe, language=pt
         ↓
 Fusão por timestamp → diálogo rotulado [Atendente]/[Cliente]
         ↓
@@ -57,9 +65,10 @@ Regras de ouro do pipeline:
   erra, e o erro sai plausível — nenhuma regra detecta um dígito trocado. Quando a extensão
   lê o contato do solicitante no Zendesk, esse valor substitui o ouvido e é marcado como
   `Cadastro` na tela; o que foi ouvido continua visível com a confiança da detecção.
-- `motivo_contato`, `produto` e `status` são **listas fechadas** configuráveis pelo administrador — o LLM escolhe, não redige.
-- Whisper sempre em `task=transcribe` + `language=pt` (o modo `translate` verte para inglês — nunca usar).
-- Uma transcrição por vez, processo em prioridade baixa: a máquina do atendente continua usável.
+- `motivo_contato`, `produto` e `status` são **listas fechadas** configuráveis pelo administrador — o LLM escolhe, não redige. Elas viajam junto com o áudio a cada envio: mudar uma lista não exige deploy nem reinício do servidor.
+- Transcrição sempre em `task=transcribe` + `language=pt` (o modo `translate` verte para inglês — nunca usar). É invariante do contrato do servidor.
+- **Nada se perde.** Sem transcrição local, servidor fora do ar não degrada: a ligação fica na fila e é reenviada. Falha de rede não consome tentativa; só recusa do servidor (4xx) manda a ligação para revisão humana.
+- **O servidor faz o que sabe fazer, o piloto assume o resto.** As capacidades vêm de `/v1/saude`: enquanto `analiseDisponivel`/`resumoDisponivel` forem `false`, as camadas locais (regras, LLM, grounding) continuam valendo. Quando forem ligadas, o piloto passa a exibir o que veio pronto — sem recompilar.
 
 ---
 
@@ -69,7 +78,7 @@ Regras de ouro do pipeline:
 |---|---|---|
 | App desktop (UI, bandeja, notificações) | .NET 8 + WPF | Stack única .NET de ponta a ponta |
 | Captura de áudio | NAudio (WASAPI mic + loopback por processo) | Requer Windows 10 2004+ |
-| Transcrição | Whisper.net (bindings do whisper.cpp) | Modelo `ggml-small` quantizado |
+| Transcrição | Servidor HTTP da operação (contrato 2.0) | Whisper com GPU; o app só envia os dois canais |
 | Resumo / campos interpretativos | LLamaSharp (bindings do llama.cpp) | Gemma 3 4B instruct Q4_K_M (GGUF) |
 | Extensão do navegador | Chrome/Edge Manifest V3, JS puro | Lê DOM do Zendesk, fala com o app via WebSocket local |
 | Banco de dados | SQLite + FTS5 (`unicode61 remove_diacritics 2`) | Fila persistida + busca full-text |
@@ -86,7 +95,8 @@ Piloto/                         # nome do repositório; o produto é o Click Wri
 │   ├── Piloto.App/             # WPF: bandeja, histórico, detalhe, configurações
 │   ├── Piloto.Core/            # domínio: fila, pipeline, normalização, grounding
 │   ├── Piloto.Audio/           # gravador WASAPI 2 canais (NAudio)
-│   ├── Piloto.Transcription/   # Whisper.net (transcrição + fusão de canais)
+│   ├── Piloto.Remote/          # cliente do servidor de transcrição (contrato 2.0)
+│   ├── Piloto.Transcription/   # Whisper local — FORA do DI, preservado como referência
 │   ├── Piloto.Llm/             # LLamaSharp: prompts, gramática JSON, listas fechadas
 │   ├── Piloto.Rules/           # regex, dicionários e confiança dos campos objetivos
 │   ├── Piloto.Data/            # SQLite, FTS5, migrações, exportação TXT/JSON/CSV
@@ -97,17 +107,20 @@ Piloto/                         # nome do repositório; o produto é o Click Wri
 ├── installer/
 │   └── setup.iss               # script Inno Setup
 ├── scripts/
-│   ├── download-models.ps1     # baixa os modelos GGUF/GGML (não versionados)
+│   ├── download-models.ps1     # baixa o modelo GGUF do resumo (não versionado)
 │   └── build-installer.ps1     # publish + iscc local (opcional)
 ├── config/
-│   ├── appsettings.json        # caminhos, modelo, retenção, porta do bridge
+│   ├── appsettings.json        # servidor, caminhos, modelo do resumo, retenção, bridge
 │   ├── listas.json             # listas fechadas: motivo, produto, status
-│   └── glossario.txt           # initial_prompt do Whisper (nomes de produtos, jargão)
+│   └── glossario.txt           # initial_prompt da transcrição (nomes de produtos, jargão)
 ├── .github/workflows/build.yml # CI: build → testes → instalador → artifact/release
 └── README.md
 ```
 
-> **Modelos não são versionados no Git** (são grandes: Whisper small ~500 MB, Gemma 3 4B Q4 ~2,5 GB). Eles são baixados pelo `scripts/download-models.ps1` ou pelo próprio app na primeira execução, e ficam em `%LOCALAPPDATA%\Piloto\models\`.
+> **Modelos não são versionados no Git.** Depois da migração sobra um só na máquina do
+> atendente: o Gemma 3 4B Q4 (~2,5 GB) do resumo. Ele é baixado pelo
+> `scripts/download-models.ps1` e fica em `%LOCALAPPDATA%\Piloto\models\` — o mesmo script
+> **remove** os modelos Whisper que versões anteriores deixaram lá.
 
 ---
 
@@ -144,11 +157,17 @@ dotnet build                      # compila tudo, sem executar
 dotnet run --project src/Piloto.App
 ```
 
-Sem os modelos baixados o app abre normalmente, mas a fila fica pausada com o aviso "modelos ausentes". Para testar o pipeline completo nesta máquina (não obrigatório):
+O app abre e grava normalmente sem nenhum modelo local: quem transcreve é o servidor. Sem o
+modelo do resumo, a ligação é transcrita e salva assim mesmo, e o resumo fica pendente até o
+modelo existir (a fila o completa sozinha depois).
 
 ```powershell
-.\scripts\download-models.ps1     # baixa Whisper small + Gemma 3 4B para %LOCALAPPDATA%\Piloto\models
+.\scripts\download-models.ps1     # baixa o Gemma 3 4B do resumo para %LOCALAPPDATA%\Piloto\models
 ```
+
+Para escrever e testar contra o contrato **sem servidor com GPU**, o projeto do servidor tem
+o modo falso (`.\executar.ps1 -Falso`), que implementa o contrato 2.0 por inteiro — diálogo,
+campos, resumo e avisos — sem baixar modelo. É contra ele que o `Piloto.Remote` foi escrito.
 
 ### Desenvolver a extensão
 
@@ -166,8 +185,10 @@ Sem os modelos baixados o app abre normalmente, mas a fila fica pausada com o av
 | Listas fechadas (motivo, produto, status) | `config/listas.json` |
 | Regex e dicionários dos campos objetivos | `src/Piloto.Rules/` |
 | Prompt do resumo e schema JSON do LLM | `src/Piloto.Llm/Prompts/` |
-| Glossário que melhora o reconhecimento do Whisper | `config/glossario.txt` |
-| Modelo usado (base/small; Gemma/Llama) e threads | `config/appsettings.json` |
+| Glossário que melhora o reconhecimento na transcrição | `config/glossario.txt` |
+| Endereço e token do servidor de transcrição | `config/appsettings.json` → `servidor`, ou a tela de Configurações |
+| Contrato do servidor (DTOs, mapeamento, classificação de erro) | `src/Piloto.Remote/` |
+| Modelo do resumo (Gemma/Llama) e threads | `config/appsettings.json` |
 | Seletores do DOM do Zendesk (inclui e-mail/telefone do cliente) | `extension/content-zendesk.js` → `SELETORES` |
 | Template do TXT exportado | `src/Piloto.Data/Export/` |
 | Retenção/exclusão automática de áudios | `config/appsettings.json` → `retencaoDias` |
@@ -256,11 +277,11 @@ O instalador aparece em **Releases** do repositório, pronto para baixar na máq
 > entrada em "Adicionar ou remover programas". **Nenhum dado é perdido** — banco, histórico
 > e modelos continuam em `%LOCALAPPDATA%\Piloto`, que não é tocado.
 
-3. Na primeira execução o app oferece **baixar os modelos** (~3 GB, uma única vez) ou aponta para uma pasta com os modelos já copiados (ambiente sem internet).
+3. Na primeira execução o app oferece **baixar o modelo de resumo** (~2,5 GB, uma única vez) ou aponta para uma pasta com o modelo já copiado (ambiente sem internet).
 4. Instalar a extensão no navegador do atendente (pasta `extension` incluída na instalação; em escala, distribuir via política de grupo/GPO).
-5. Configurar na tela administrativa: listas fechadas, glossário, retenção e porta do bridge.
+5. Configurar na tela administrativa: **endereço e token do servidor de transcrição** (um token por máquina), listas fechadas, glossário, retenção e porta do bridge. O botão **Testar conexão** mostra modelo, dispositivo e fila do servidor.
 
-Requisitos da máquina destino: Windows 10 2004+ 64 bits, 12 GB RAM recomendado (8 GB opera com Whisper `base` e camada LLM desligada), SSD com ~10 GB livres, **headset** (obrigatório — caixas de som contaminam os canais) e Zendesk aberto em **janela dedicada do navegador**.
+Requisitos da máquina destino: Windows 10 2004+ 64 bits, 8 GB RAM (a transcrição não usa mais a memória da máquina; com a camada LLM desligada, 4 GB bastam), SSD com ~5 GB livres, **headset** (obrigatório — caixas de som contaminam os canais), Zendesk aberto em **janela dedicada do navegador** e rede até o servidor de transcrição.
 
 O publish é *self-contained*: a máquina destino **não precisa ter .NET instalado**.
 
@@ -273,10 +294,10 @@ O publish é *self-contained*: a máquina destino **não precisa ter .NET instal
 ```json
 {
   "bridge":        { "porta": 8517 },
-  "audio":         { "processoNavegador": "chrome", "formato": "flac", "taxaHz": 16000 },
-  "whisper":       { "modelo": "ggml-small-q5_1.bin", "idioma": "pt", "threads": 5 },
+  "audio":         { "processoNavegador": "chrome", "formato": "wav", "taxaHz": 16000 },
+  "servidor":      { "url": "http://DESKTOP-VEP5JQ3:8600", "token": "", "timeoutSegundos": 300, "maxTentativas": 3 },
   "llm":           { "habilitado": true, "modelo": "gemma-3-4b-it-Q4_K_M.gguf", "temperatura": 0 },
-  "fila":          { "simultaneas": 1, "prioridadeProcesso": "BelowNormal" },
+  "fila":          { "simultaneas": 1 },
   "retencaoDias":  { "audio": 30, "transcricao": 180 },
   "pastaDados":    "%LOCALAPPDATA%\\Piloto"
 }
@@ -286,7 +307,8 @@ O publish é *self-contained*: a máquina destino **não precisa ter .NET instal
 
 ## Privacidade e conformidade (LGPD)
 
-- Processamento 100% local — nenhum áudio, transcrição ou metadado sai da máquina.
+- Processamento dentro da operação — nenhum áudio, transcrição ou metadado vai para API externa. O áudio e os metadados (que incluem nome, e-mail e telefone do cliente) **trafegam na rede interna** até o servidor de transcrição, autenticados por token. O servidor não persiste nada: o resultado expira em 15 minutos.
+- **Ponto aberto para decisão de infraestrutura:** hoje esse tráfego é HTTP sem TLS. Numa rede local controlada isso pode ser aceitável; a decisão precisa ser tomada explicitamente antes da operação em produção, não depois.
 - O app é o **gravador**: indicador visível de gravação na bandeja + botão "não gravar esta chamada".
 - Retenção e exclusão automáticas configuráveis; exportações com PII mascarada por padrão.
 - Recomendado **BitLocker** ativo nas máquinas do piloto (dados em repouso).

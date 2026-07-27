@@ -28,7 +28,12 @@
     <ProjectReference Include="..\Piloto.Rules\Piloto.Rules.csproj" />
     <ProjectReference Include="..\Piloto.Data\Piloto.Data.csproj" />
     <ProjectReference Include="..\Piloto.Audio\Piloto.Audio.csproj" />
-    <ProjectReference Include="..\Piloto.Transcription\Piloto.Transcription.csproj" />
+    <ProjectReference Include="..\Piloto.Remote\Piloto.Remote.csproj" />
+    <!-- Piloto.Transcription (Whisper local) NÃO é mais referenciado: a transcrição roda no
+         servidor. Referenciá-lo publicaria junto os nativos do whisper.cpp (avx/avx2/noavx)
+         em toda máquina da operação, para código que ninguém chama. O projeto continua na
+         solução, então o CI garante que ele compila e o histórico dos filtros fica vivo. -->
+    <!-- <ProjectReference Include="..\Piloto.Transcription\Piloto.Transcription.csproj" /> -->
     <ProjectReference Include="..\Piloto.Llm\Piloto.Llm.csproj" />
     <ProjectReference Include="..\Piloto.Bridge\Piloto.Bridge.csproj" />
   </ItemGroup>

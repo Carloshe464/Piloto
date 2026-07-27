@@ -82,6 +82,7 @@ public sealed class RecordExporter : IExporter
         // copiar para o cadastro — mascarado, o campo não serve para nada.
         AppendCampos(sb, "CPF/CNPJ", r.Campos.Cpfs, mascarar: false);
         AppendCampos(sb, "E-mails", r.Campos.Emails, mascarar);
+        AppendCampos(sb, "Nomes", r.Campos.Nomes, mascarar);
         AppendCampos(sb, "Datas", r.Campos.Datas, mascarar);
         AppendCampos(sb, "Valores", r.Campos.Valores, mascarar);
         AppendCampos(sb, "Protocolos", r.Campos.Protocolos, mascarar);
@@ -147,6 +148,7 @@ public sealed class RecordExporter : IExporter
                 Telefones = MapearCampos(r.Campos.Telefones, mascarar),
                 Cpfs = MapearCampos(r.Campos.Cpfs, mascarar: false),
                 Emails = MapearCampos(r.Campos.Emails, mascarar),
+                Nomes = MapearCampos(r.Campos.Nomes, mascarar),
                 Datas = MapearCampos(r.Campos.Datas, mascarar),
                 Valores = MapearCampos(r.Campos.Valores, mascarar),
                 Protocolos = MapearCampos(r.Campos.Protocolos, mascarar),

@@ -2,13 +2,18 @@ using Microsoft.Extensions.Logging;
 using Piloto.Core.Abstractions;
 using Piloto.Core.Configuration;
 using Piloto.Core.Models;
-using Piloto.Core.Services;
 
 namespace Piloto.Core.Pipeline;
 
 /// <summary>
 /// Encadeia as etapas do processamento de uma ligação:
 /// transcrição → (normalização + regras) → LLM → grounding → registro persistido.
+/// <para>
+/// Depois da migração, as duas etapas do meio são <b>condicionais</b>: quando o servidor
+/// devolve <c>campos</c> e <c>resumo</c> (capacidades ligadas em <c>/v1/saude</c>), o piloto
+/// usa o que veio pronto e não refaz o trabalho. Enquanto ele não devolve, as camadas locais
+/// seguem sendo a única extração que existe — e essa decisão é por chamada, não por versão.
+/// </para>
 /// </summary>
 public sealed class TranscriptionPipeline
 {
@@ -47,38 +52,50 @@ public sealed class TranscriptionPipeline
     public const string MarcadorErroLlm = "erro no LLM";
 
     /// <summary>
-    /// Descarrega Whisper e LLM da memória (recarregados na próxima ligação). Devolve true
-    /// se algo estava carregado. Chamado pela fila após ociosidade: o Piloto usa memória de
-    /// pico durante o processamento, não de posse permanente.
+    /// Descarrega o LLM da memória (recarregado na próxima ligação). Devolve true se algo
+    /// estava carregado. Chamado pela fila após ociosidade: o Piloto usa memória de pico
+    /// durante o processamento, não de posse permanente.
     /// </summary>
-    public bool LiberarModelos()
-    {
-        var whisper = _transcriber.LiberarModelo();
-        var llm = _llm.LiberarModelo();
-        return whisper || llm;
-    }
+    public bool LiberarModelos() => _llm.LiberarModelo();
 
     public async Task<CallRecord> ProcessarAsync(AudioCapture captura, CancellationToken ct = default)
     {
         var listas = _listasProvider();
 
-        _log.LogInformation("Transcrevendo ligação ({Duracao})", captura.Duracao);
-        var transcript = await _transcriber.TranscreverAsync(captura, ct).ConfigureAwait(false);
+        _log.LogInformation("Transcrevendo ligação {Ligacao} ({Duracao})", captura.LigacaoId, captura.Duracao);
+        var resultado = await _transcriber.TranscreverAsync(captura, ct).ConfigureAwait(false);
+        var transcript = resultado.Transcript;
 
-        _log.LogInformation("Aplicando regras (camada 1)");
-        var campos = _rules.Extrair(transcript);
+        // ----------------------------------------------------------- Camada 1: campos
+        ObjectiveFields campos;
+        if (resultado.Campos is { } camposDoServidor)
+        {
+            _log.LogInformation("Campos objetivos vieram prontos do servidor ({Origem})", resultado.Origem);
+            campos = camposDoServidor;
+        }
+        else
+        {
+            _log.LogInformation("Aplicando regras (camada 1)");
+            campos = _rules.Extrair(transcript);
+        }
 
         // Contato lido do cadastro do Zendesk entra depois das regras e vence o que a
-        // transcrição deu para o mesmo valor: é dado digitado, não dado ouvido.
+        // transcrição deu para o mesmo valor: é dado digitado, não dado ouvido. Idempotente,
+        // então roda mesmo quando os campos vieram do servidor (que também os ancora).
         ContactMerger.Aplicar(campos, captura.Metadata);
 
-        // O LLM é a camada opcional: se falhar (modelo incompatível, corrompido, sem
-        // memória), o registro sai sem resumo e marcado para revisão — a transcrição
-        // e os campos objetivos, que já custaram a passada do Whisper, são preservados.
+        // ----------------------------------------------------------- Camada 2: resumo
         LlmSummary resumo;
         string? erroLlm = null;
         var dialogoTruncadoNoResumo = false;
-        if (transcript.EstaVazio)
+        var resumoPendente = false;
+
+        if (resultado.Resumo is { } resumoDoServidor)
+        {
+            _log.LogInformation("Resumo veio pronto do servidor");
+            resumo = resumoDoServidor;
+        }
+        else if (transcript.EstaVazio)
         {
             // Sem fala não há o que resumir — e carregar o LLM à toa é justamente o passo
             // mais arriscado numa máquina sem memória. O registro sai marcado adiante.
@@ -87,12 +104,6 @@ public sealed class TranscriptionPipeline
         }
         else if (_settings.Llm.Habilitado && _modelos.LlmDisponivel)
         {
-            // Libera o Whisper antes do LLM apenas quando a memória exige: em máquinas
-            // com folga, mantê-lo carregado poupa ~20 s de recarga na ligação seguinte;
-            // nas de pouca RAM, a folga liberada decide se o resumo roda.
-            if (!MemoriaComportaLlmSemLiberarWhisper())
-                _transcriber.LiberarModelo();
-
             // O PromptBuilder corta ligações longas (início + fim) para caber no contexto;
             // quem lê o resumo precisa saber que o miolo não foi lido.
             dialogoTruncadoNoResumo = transcript.TextoRotulado().Length > ResumoLimites.MaxCharsDialogo;
@@ -110,14 +121,26 @@ public sealed class TranscriptionPipeline
                 erroLlm = ex.Message;
             }
         }
+        else if (_settings.Llm.Habilitado)
+        {
+            // LLM ligado mas ausente do disco. A transcrição (a parte cara) já está feita e
+            // vai para o banco agora; o resumo fica pendente e a varredura o completa quando
+            // o modelo existir. Antes da migração isto não acontecia — a fila ficava pausada.
+            _log.LogWarning("Modelo LLM ausente — registro salvo sem resumo, para completar depois");
+            resumo = LlmSummary.Vazio();
+            resumoPendente = true;
+        }
         else
         {
-            _log.LogInformation("LLM desabilitado/ausente — registro sem resumo interpretativo");
+            _log.LogInformation("LLM desabilitado — registro sem resumo interpretativo");
             resumo = LlmSummary.Vazio();
         }
 
         var registro = new CallRecord
         {
+            // A identidade nasce na captura e atravessa fila e servidor: um único id do
+            // microfone ao banco. (No reprocessamento o uuid original é restaurado.)
+            Uuid = captura.LigacaoId,
             Metadata = captura.Metadata,
             Transcript = transcript,
             Campos = campos,
@@ -132,8 +155,16 @@ public sealed class TranscriptionPipeline
         if (erroLlm is not null)
             registro.MarcarRevisao($"Resumo automático indisponível — {MarcadorErroLlm}: {erroLlm}");
 
+        if (resumoPendente)
+            registro.MarcarRevisao($"Resumo automático ainda não gerado — {MarcadorErroLlm}: modelo ausente na máquina.");
+
         if (dialogoTruncadoNoResumo)
             registro.MarcarRevisao("Ligação longa: o resumo automático considerou início e fim do diálogo — o trecho intermediário não foi lido pelo LLM.");
+
+        // Achados do grounding do servidor (número citado que não consta na transcrição,
+        // valor fora da lista fechada). São dado; a política de revisão continua sendo daqui.
+        foreach (var aviso in resultado.Avisos)
+            registro.MarcarRevisao(aviso);
 
         // Fisicamente impossível falar além do fim da ligação: timestamps suspeitos
         // embaralham a ordem do diálogo (a compressão no transcritor trata o caso comum;
@@ -147,9 +178,20 @@ public sealed class TranscriptionPipeline
         }
 
         // Uma ligação real sem NENHUMA fala reconhecível é falha (captura ou transcrição),
-        // nunca um registro "válido" de aparência normal.
+        // nunca um registro "válido" de aparência normal. Um único canal mudo, ao contrário,
+        // é corriqueiro (loopback que não capturou nada) e não marca revisão sozinho.
         if (transcript.EstaVazio)
-            registro.MarcarRevisao("Transcrição vazia — nenhuma fala reconhecível no áudio; confira a gravação preservada.");
+        {
+            var causa = resultado.CanaisVazios.Count > 0
+                ? " Causa relatada: " + string.Join(" | ", resultado.CanaisVazios)
+                : "";
+            registro.MarcarRevisao(
+                "Transcrição vazia — nenhuma fala reconhecível no áudio; confira a gravação preservada." + causa);
+        }
+        else if (resultado.CanaisVazios.Count > 0)
+        {
+            _log.LogInformation("Canal sem áudio (não é erro): {Motivos}", string.Join(" | ", resultado.CanaisVazios));
+        }
 
         // Problemas detectados na captura (mic mudo etc.) viram revisão com causa explícita:
         // transcrição ruim por áudio ruim nunca passa como se fosse normal.
@@ -169,8 +211,8 @@ public sealed class TranscriptionPipeline
     /// Reexecuta apenas as camadas 2 (LLM) e 3 (grounding) sobre um registro já transcrito
     /// cujo resumo falhou — a transcrição salva no banco é a entrada, o áudio não é tocado.
     /// Devolve true quando o resumo foi gerado e aplicado ao registro (o chamador persiste);
-    /// false quando as condições ainda não permitem (LLM ausente, sem memória agora) — o
-    /// registro fica como está e a retentativa acontece mais tarde.
+    /// false quando as condições ainda não permitem (LLM ausente) — o registro fica como
+    /// está e a retentativa acontece mais tarde.
     /// </summary>
     public async Task<bool> TentarResumoPendenteAsync(CallRecord registro, CancellationToken ct = default)
     {
@@ -178,8 +220,6 @@ public sealed class TranscriptionPipeline
         if (registro.Transcript.EstaVazio) return false;
 
         var listas = _listasProvider();
-        if (!MemoriaComportaLlmSemLiberarWhisper())
-            _transcriber.LiberarModelo();
 
         LlmSummary resumo;
         try
@@ -199,31 +239,5 @@ public sealed class TranscriptionPipeline
         _grounding.Aplicar(registro, listas);
         _log.LogInformation("Resumo pendente concluído para o registro {Id}", registro.Id);
         return true;
-    }
-
-    /// <summary>
-    /// True quando a memória atual comporta carregar o LLM sem descartar o Whisper.
-    /// Usa a mesma régua do guard do extractor (arquivo + máx(768 MB, 1/2)). Sem leitura
-    /// confiável de memória, responde false — o caminho conservador (liberar) prevalece.
-    /// </summary>
-    private bool MemoriaComportaLlmSemLiberarWhisper()
-    {
-        var caminho = _modelos.CandidatosLlm.FirstOrDefault();
-        if (caminho is null)
-            return true;
-
-        if (!MemoriaDisponivel.TentarObter(out var fisica, out var commit))
-            return false;
-
-        try
-        {
-            var tamanho = new FileInfo(caminho).Length;
-            var necessario = tamanho + Math.Max(768L * 1024 * 1024, tamanho / 2);
-            return Math.Min(fisica, commit) >= necessario;
-        }
-        catch (IOException)
-        {
-            return false;
-        }
     }
 }

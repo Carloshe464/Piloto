@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Piloto.Core.Configuration;
 
 namespace Piloto.App.Services;
@@ -38,8 +40,66 @@ public sealed class ConfigService
                 File.Copy(origem, destino);
         }
 
+        // Máquina já instalada TEM o appsettings.json dela, então a cópia acima não roda —
+        // e uma seção nova (a do servidor de transcrição, por exemplo) nunca chegaria lá.
+        // O app subiria mudo, apontando para o padrão compilado. Completar as chaves
+        // ausentes a partir do arquivo empacotado é o que faz a atualização valer em campo.
+        CompletarChavesNovas(
+            Path.Combine(userDir, "appsettings.json"),
+            Path.Combine(bundledDir, "appsettings.json"));
+
         var settings = AppSettings.Load(Path.Combine(userDir, "appsettings.json"));
         return new ConfigService(userDir, settings);
+    }
+
+    /// <summary>
+    /// Acrescenta ao config do usuário as chaves que só existem no config empacotado,
+    /// recursivamente. <b>Nunca sobrescreve valor existente</b> — o que o administrador
+    /// ajustou continua valendo; o que ele nunca viu ganha o padrão da versão nova.
+    /// Devolve true se o arquivo foi alterado.
+    /// </summary>
+    internal static bool CompletarChavesNovas(string caminhoUsuario, string caminhoPadrao)
+    {
+        if (!File.Exists(caminhoUsuario) || !File.Exists(caminhoPadrao)) return false;
+
+        try
+        {
+            if (JsonNode.Parse(File.ReadAllText(caminhoUsuario)) is not JsonObject usuario) return false;
+            if (JsonNode.Parse(File.ReadAllText(caminhoPadrao)) is not JsonObject padrao) return false;
+            if (!Completar(usuario, padrao)) return false;
+
+            File.WriteAllText(caminhoUsuario, usuario.ToJsonString(new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            }));
+            return true;
+        }
+        catch (Exception)
+        {
+            // Config do usuário ilegível não pode impedir o app de abrir: AppSettings.Load
+            // já cai nos padrões, e a tela de configurações permite corrigir.
+            return false;
+        }
+    }
+
+    private static bool Completar(JsonObject usuario, JsonObject padrao)
+    {
+        var mudou = false;
+        foreach (var (chave, valorPadrao) in padrao)
+        {
+            if (!usuario.TryGetPropertyValue(chave, out var valorUsuario) || valorUsuario is null)
+            {
+                // Reparse em vez de reaproveitar o nó: um JsonNode só pode ter um pai.
+                usuario[chave] = valorPadrao is null ? null : JsonNode.Parse(valorPadrao.ToJsonString());
+                mudou = true;
+            }
+            else if (valorUsuario is JsonObject objUsuario && valorPadrao is JsonObject objPadrao)
+            {
+                mudou |= Completar(objUsuario, objPadrao);
+            }
+        }
+        return mudou;
     }
 
     public ListasFechadas CarregarListas() => ListasFechadas.Load(CaminhoListas);

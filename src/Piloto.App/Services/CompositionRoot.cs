@@ -11,8 +11,8 @@ using Piloto.Core.Text;
 using Piloto.Data;
 using Piloto.Data.Export;
 using Piloto.Llm;
+using Piloto.Remote;
 using Piloto.Rules;
-using Piloto.Transcription;
 
 namespace Piloto.App.Services;
 
@@ -45,7 +45,14 @@ public static class CompositionRoot
         services.AddSingleton<ICallRepository, SqliteCallRepository>();
         services.AddSingleton<IExporter, RecordExporter>();
         services.AddSingleton(new PromptBuilder());
-        services.AddSingleton<ITranscriber, WhisperTranscriber>();
+
+        // Transcrição no servidor. O WhisperTranscriber continua no repositório (histórico
+        // dos filtros calibrados em campo), mas fora do contêiner: não há mais fallback
+        // local — se o servidor não responder, a fila enfileira e reenvia.
+        services.AddSingleton<ServidorTranscricaoClient>();
+        services.AddSingleton<ServidorSaudeMonitor>();
+        services.AddSingleton<ITranscriber, RemoteTranscriber>();
+
         services.AddSingleton<ILlmExtractor, LlmWorkerExtractor>();
         services.AddSingleton<IAudioRecorder, WasapiDualChannelRecorder>();
         services.AddSingleton<ExtensionAudioRecorder>();
