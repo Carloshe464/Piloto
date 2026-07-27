@@ -121,6 +121,47 @@ public class SqliteRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void LigacaoIdSobreviveAoBanco()
+    {
+        // É a Idempotency-Key do envio: se não voltar do banco igual, um reinício do app
+        // faria o servidor transcrever a mesma ligação duas vezes.
+        var item = new QueueItem
+        {
+            LigacaoId = "abc123",
+            CaminhoAudioAtendente = "a.wav",
+            CaminhoAudioCliente = "c.wav",
+        };
+        _repo.EnfileirarItem(item);
+
+        var pendente = _repo.ProximoPendente();
+        Assert.Equal("abc123", pendente!.LigacaoId);
+    }
+
+    [Fact]
+    public void ItemEmRecuoNaoEhElegivelAteAHora()
+    {
+        // Servidor fora do ar: o item continua Pendente (nada se perde), mas não é
+        // reenviado a cada tique de 3 s.
+        var item = new QueueItem
+        {
+            CaminhoAudioAtendente = "a.wav",
+            CaminhoAudioCliente = "c.wav",
+        };
+        _repo.EnfileirarItem(item);
+
+        item.ProximaTentativaEm = DateTimeOffset.Now.AddMinutes(10);
+        _repo.AtualizarItem(item);
+        Assert.Null(_repo.ProximoPendente());
+
+        // Continua contando como pendente para o atendente — a ligação está guardada.
+        Assert.Equal(1, _repo.ContarPendentes());
+
+        item.ProximaTentativaEm = DateTimeOffset.Now.AddSeconds(-1);
+        _repo.AtualizarItem(item);
+        Assert.NotNull(_repo.ProximoPendente());
+    }
+
+    [Fact]
     public void RecuperaItensOrfaosDeExecucaoAnterior()
     {
         var item = new QueueItem

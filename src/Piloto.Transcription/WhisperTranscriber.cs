@@ -9,7 +9,15 @@ using Whisper.net;
 namespace Piloto.Transcription;
 
 /// <summary>
-/// Transcreve os dois canais com Whisper.net (bindings do whisper.cpp).
+/// Transcreve os dois canais com Whisper.net (bindings do whisper.cpp), na máquina do
+/// atendente.
+/// <para>
+/// <b>Fora do contêiner desde a migração para o servidor</b> (o <c>RemoteTranscriber</c>
+/// ocupa o lugar no DI). Mantido no repositório de propósito: os limiares, o padrão de
+/// alucinação e a compressão de timestamps aqui foram calibrados contra ligações reais, e
+/// essa memória é cara de reconstruir. Continua compilando — e continua funcionando se for
+/// religado —, mas não depende mais de nada que a migração removeu.
+/// </para>
 /// <para>
 /// Sempre <c>task=transcribe</c> + <c>language=pt</c>. O modo <c>translate</c> (que verteria
 /// para inglês) nunca é ativado. O <see cref="WhisperFactory"/> é caro de criar e fica em cache
@@ -19,7 +27,6 @@ namespace Piloto.Transcription;
 public sealed class WhisperTranscriber : ITranscriber, IDisposable
 {
     private readonly AppSettings _settings;
-    private readonly IModelCatalog _modelos;
     private readonly Func<string?> _glossarioProvider;
     private readonly ILogger<WhisperTranscriber> _log;
 
@@ -29,14 +36,38 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
 
     public WhisperTranscriber(
         AppSettings settings,
-        IModelCatalog modelos,
         Func<string?> glossarioProvider,
         ILogger<WhisperTranscriber> log)
     {
         _settings = settings;
-        _modelos = modelos;
         _glossarioProvider = glossarioProvider;
         _log = log;
+    }
+
+    /// <summary>Idioma fixo: o produto transcreve ligações em português e nunca traduz.</summary>
+    private const string Idioma = "pt";
+
+    /// <summary>
+    /// CPUs com menos de 8 threads lógicos não pagam o beam search (~2x mais lento)
+    /// sem atrasar a fila de forma perceptível — nelas, greedy com o mesmo modelo.
+    /// </summary>
+    private static bool CpuComportaBeam => Environment.ProcessorCount >= 8;
+
+    /// <summary>
+    /// Modelos GGML na pasta de modelos, do maior para o menor — no Whisper, maior é melhor.
+    /// Enumerado aqui (e não no <c>IModelCatalog</c>, que ficou só com o LLM) porque a
+    /// transcrição local passou a ser assunto exclusivo desta classe.
+    /// </summary>
+    private IReadOnlyList<string> CandidatosWhisper
+    {
+        get
+        {
+            var pasta = _settings.PastaModelos;
+            if (!Directory.Exists(pasta)) return Array.Empty<string>();
+            return Directory.EnumerateFiles(pasta, "*.bin")
+                .OrderByDescending(f => new FileInfo(f).Length)
+                .ToList();
+        }
     }
 
     /// <summary>Beam search só compensa em modelos maiores que small: a máquina que comporta
@@ -62,20 +93,22 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
     // threads, 1 min de ligação passou de segundos para muitos minutos (regressão da
     // 0.7.3). O filtro pós-decode (PadraoAlucinacao) pega as mesmas etiquetas de graça.
 
-    public async Task<Transcript> TranscreverAsync(AudioCapture captura, CancellationToken ct = default)
+    public async Task<TranscriptionResult> TranscreverAsync(AudioCapture captura, CancellationToken ct = default)
     {
         var caminhoModelo = EscolherModelo();
         var factory = ObterFactory(caminhoModelo);
         var glossario = _glossarioProvider();
-        var usarBeam = new FileInfo(caminhoModelo).Length > LimiarModeloGrandeBytes
-                       && Hardware.CpuComportaBeam;
+        var usarBeam = new FileInfo(caminhoModelo).Length > LimiarModeloGrandeBytes && CpuComportaBeam;
 
         var segmentos = new List<TranscriptSegment>();
         segmentos.AddRange(await TranscreverCanalAsync(factory, usarBeam, captura.CaminhoAtendente, Speaker.Atendente, glossario, ct).ConfigureAwait(false));
         segmentos.AddRange(await TranscreverCanalAsync(factory, usarBeam, captura.CaminhoCliente, Speaker.Cliente, glossario, ct).ConfigureAwait(false));
 
-        // A fusão por timestamp acontece no construtor (ordena por início).
-        return new Transcript(segmentos);
+        // A fusão por timestamp acontece no construtor (ordena por início). Sem campos nem
+        // resumo: transcrever é tudo o que a máquina local faz — as camadas 2 e 3 seguem
+        // sendo do pipeline.
+        return TranscriptionResult.SomenteTranscricao(
+            new Transcript(segmentos), $"whisper local {Path.GetFileName(caminhoModelo)}");
     }
 
     /// <summary>
@@ -84,7 +117,7 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
     /// </summary>
     private string EscolherModelo()
     {
-        var candidatos = _modelos.CandidatosWhisper;
+        var candidatos = CandidatosWhisper;
         if (candidatos.Count == 0)
             throw new InvalidOperationException("Modelo Whisper ausente.");
 
@@ -136,8 +169,8 @@ public sealed class WhisperTranscriber : ITranscriber, IDisposable
         }
 
         var builder = factory.CreateBuilder()
-            .WithLanguage(_settings.Whisper.Idioma)   // "pt"
-            .WithThreads(Hardware.ResolverThreads(_settings.Whisper.Threads))
+            .WithLanguage(Idioma)   // "pt"
+            .WithThreads(Hardware.ResolverThreads(0))
             // Cada janela de 30 s é decodificada sem herdar o texto da anterior: uma
             // alucinação num trecho silencioso não contamina o resto da ligação.
             .WithNoContext()

@@ -1,20 +1,26 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Piloto.Core.Abstractions;
+using Piloto.Core.Configuration;
 using Piloto.Core.Models;
 
 namespace Piloto.Core.Pipeline;
 
 /// <summary>
-/// Consome a fila persistida (SQLite) processando <b>uma transcrição por vez</b>, em
-/// prioridade baixa, para não travar a máquina do atendente. Pausa automaticamente
-/// quando os modelos estão ausentes.
+/// Consome a fila persistida (SQLite) processando <b>uma ligação por vez</b>.
+/// <para>
+/// Depois da migração para o servidor, esta classe é a garantia de que nenhuma ligação se
+/// perde: não há mais transcrição local para onde cair, então servidor fora do ar significa
+/// <b>enfileirar e reenviar</b> — nunca descartar. Por isso falha de rede não consome
+/// tentativa (ver <see cref="FalhaTranscricao"/>): só recusa do servidor e erro de
+/// processamento contam.
+/// </para>
 /// </summary>
 public sealed class QueueProcessor : IAsyncDisposable
 {
     private readonly ICallRepository _repo;
     private readonly TranscriptionPipeline _pipeline;
-    private readonly IModelCatalog _modelos;
+    private readonly AppSettings _settings;
     private readonly ILogger<QueueProcessor> _log;
 
     private CancellationTokenSource? _cts;
@@ -22,15 +28,16 @@ public sealed class QueueProcessor : IAsyncDisposable
 
     private static readonly TimeSpan IntervaloOcioso = TimeSpan.FromSeconds(3);
 
-    // Após este tempo sem itens, os modelos são devolvidos ao SO (~2,4 GB do 4B): o
-    // atendente não paga o aluguel de RAM o dia inteiro por algo que trabalha minutos.
-    // Em sequência de ligações o cache continua valendo — só descarrega na calmaria.
+    // Após este tempo sem itens, o LLM é devolvido ao SO (~2,4 GB do 4B): o atendente não
+    // paga o aluguel de RAM o dia inteiro por algo que trabalha minutos. Em sequência de
+    // ligações o cache continua valendo — só descarrega na calmaria.
     private static readonly TimeSpan DescargaAposOciosidade = TimeSpan.FromMinutes(5);
-
-    private const int MaxTentativas = 3;
 
     private DateTimeOffset _ultimaAtividade = DateTimeOffset.Now;
     private bool _modelosDescarregados;
+
+    /// <summary>Tentativas antes de a ligação ir para revisão humana.</summary>
+    private int MaxTentativas => Math.Max(1, _settings.Servidor.MaxTentativas);
 
     public event EventHandler<CallRecord>? RegistroProcessado;
     public event EventHandler? FilaMudou;
@@ -39,11 +46,18 @@ public sealed class QueueProcessor : IAsyncDisposable
     /// mostra que o trabalho está em andamento em vez de silêncio.</summary>
     public event EventHandler<long>? ItemIniciado;
 
-    public QueueProcessor(ICallRepository repo, TranscriptionPipeline pipeline, IModelCatalog modelos, ILogger<QueueProcessor> log)
+    /// <summary>
+    /// Disparado quando um envio falha por indisponibilidade do servidor, com o motivo e o
+    /// instante da próxima tentativa. A UI usa para dizer ao atendente que a ligação está
+    /// guardada — sem isso, "nada aconteceu" é indistinguível de "a ligação se perdeu".
+    /// </summary>
+    public event EventHandler<(string Motivo, DateTimeOffset Proxima)>? EnvioAdiado;
+
+    public QueueProcessor(ICallRepository repo, TranscriptionPipeline pipeline, AppSettings settings, ILogger<QueueProcessor> log)
     {
         _repo = repo;
         _pipeline = pipeline;
-        _modelos = modelos;
+        _settings = settings;
         _log = log;
     }
 
@@ -76,20 +90,11 @@ public sealed class QueueProcessor : IAsyncDisposable
 
     private async Task LoopAsync(CancellationToken ct)
     {
-        // Prioridade baixa: a UI e o navegador do atendente continuam responsivos.
-        try { Thread.CurrentThread.Priority = ThreadPriority.Lowest; } catch { /* ignore */ }
-
         _log.LogInformation("QueueProcessor iniciado");
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                if (!_modelos.PipelinePronto)
-                {
-                    await EsperarAsync(ct).ConfigureAwait(false);
-                    continue;
-                }
-
                 var item = _repo.ProximoPendente();
                 if (item is null)
                 {
@@ -148,6 +153,7 @@ public sealed class QueueProcessor : IAsyncDisposable
 
             item.Estado = QueueState.Concluido;
             item.RegistroId = registro.Id;
+            item.ProximaTentativaEm = null;
             item.AtualizadoEm = DateTimeOffset.Now;
             _repo.AtualizarItem(item);
 
@@ -157,15 +163,7 @@ public sealed class QueueProcessor : IAsyncDisposable
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            item.Tentativas++;
-            item.UltimoErro = ex.Message;
-            item.Estado = item.Tentativas >= MaxTentativas ? QueueState.Erro : QueueState.Pendente;
-            item.AtualizadoEm = DateTimeOffset.Now;
-            _repo.AtualizarItem(item);
-            _log.LogError(ex, "Falha ao processar item {Id} (tentativa {N})", item.Id, item.Tentativas);
-            if (item.Estado == QueueState.Erro)
-                MaterializarItensComErro();
-            FilaMudou?.Invoke(this, EventArgs.Empty);
+            RegistrarFalha(item, ex);
         }
         finally
         {
@@ -177,7 +175,79 @@ public sealed class QueueProcessor : IAsyncDisposable
         }
     }
 
-    /// <summary>Entre varreduras frustradas (nada pendente, ou memória ainda curta) não
+    /// <summary>
+    /// Traduz a falha em destino do item. A distinção que importa: <b>4xx são definitivos</b>
+    /// (retentar só repete o erro) e <b>falha de rede é transitória</b> (retentar é o
+    /// comportamento certo, e a idempotência do servidor torna isso barato).
+    /// </summary>
+    private void RegistrarFalha(QueueItem item, Exception ex)
+    {
+        item.UltimoErro = ex.Message;
+        item.AtualizadoEm = DateTimeOffset.Now;
+        item.ProximaTentativaEm = null;
+
+        var tipo = (ex as TranscricaoException)?.Tipo;
+        switch (tipo)
+        {
+            case FalhaTranscricao.Transitoria:
+                // O áudio está em disco e o problema não é dele. Não conta tentativa: com
+                // laço de 3 s, 10 segundos de servidor fora do ar apagariam a ligação.
+                item.Estado = QueueState.Pendente;
+                item.ProximaTentativaEm = DateTimeOffset.Now + Recuo(item);
+                _repo.AtualizarItem(item);
+                _log.LogWarning("Item {Id}: servidor indisponível ({Erro}). Nova tentativa em {Quando:HH:mm:ss}",
+                    item.Id, ex.Message, item.ProximaTentativaEm);
+                EnvioAdiado?.Invoke(this, (ex.Message, item.ProximaTentativaEm.Value));
+                FilaMudou?.Invoke(this, EventArgs.Empty);
+                return;
+
+            case FalhaTranscricao.Reenviar:
+                // Resultado expirou no servidor (900 s). Reenviar do zero é a saída — conta
+                // tentativa só para o laço ter fim se o servidor insistir em não achar o job.
+                item.Tentativas++;
+                item.Estado = item.Tentativas >= MaxTentativas ? QueueState.Erro : QueueState.Pendente;
+                _log.LogWarning("Item {Id}: resultado expirou no servidor — reenviando o áudio (tentativa {N})",
+                    item.Id, item.Tentativas);
+                break;
+
+            case FalhaTranscricao.Definitiva:
+                // O servidor recusou e recusaria de novo (400/401/413/415). Vai direto para
+                // revisão humana com o motivo, sem gastar mais duas passadas idênticas.
+                item.Tentativas = MaxTentativas;
+                item.Estado = QueueState.Erro;
+                _log.LogError(ex, "Item {Id}: servidor recusou definitivamente — sem retentativa", item.Id);
+                break;
+
+            case FalhaTranscricao.Processamento:
+            default:
+                // Erro do job no servidor, ou falha não classificada (bug do cliente, disco,
+                // banco): comportamento histórico — tenta de novo até o teto.
+                item.Tentativas++;
+                item.Estado = item.Tentativas >= MaxTentativas ? QueueState.Erro : QueueState.Pendente;
+                _log.LogError(ex, "Falha ao processar item {Id} (tentativa {N})", item.Id, item.Tentativas);
+                break;
+        }
+
+        _repo.AtualizarItem(item);
+        if (item.Estado == QueueState.Erro)
+            MaterializarItensComErro();
+        FilaMudou?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Recuo antes de reenviar, derivado da idade do item — sem coluna extra e sem
+    /// martelar o servidor: quem acabou de chegar tenta rápido (a queda pode ser um
+    /// reinício de serviço); quem já espera há dez minutos tenta de dez em dez.
+    /// </summary>
+    private static TimeSpan Recuo(QueueItem item)
+    {
+        var idade = DateTimeOffset.Now - item.CriadoEm;
+        if (idade < TimeSpan.FromMinutes(2)) return TimeSpan.FromSeconds(30);
+        if (idade < TimeSpan.FromMinutes(10)) return TimeSpan.FromMinutes(2);
+        return TimeSpan.FromMinutes(10);
+    }
+
+    /// <summary>Entre varreduras frustradas (nada pendente, ou LLM ainda ausente) não
     /// adianta reconsultar a cada tique de 3 s — o quadro só muda em minutos.</summary>
     private static readonly TimeSpan IntervaloVarreduraResumos = TimeSpan.FromMinutes(10);
     private DateTimeOffset _proximaVarreduraResumos = DateTimeOffset.MinValue;
@@ -205,7 +275,7 @@ public sealed class QueueProcessor : IAsyncDisposable
         {
             if (!await _pipeline.TentarResumoPendenteAsync(registro, ct).ConfigureAwait(false))
             {
-                // Sem LLM ou sem memória neste momento — o quadro muda, tenta mais tarde.
+                // Sem LLM neste momento — o quadro muda, tenta mais tarde.
                 _proximaVarreduraResumos = DateTimeOffset.Now + IntervaloVarreduraResumos;
                 return false;
             }
@@ -259,6 +329,7 @@ public sealed class QueueProcessor : IAsyncDisposable
                 var captura = ReconstruirCaptura(item);
                 var registro = new CallRecord
                 {
+                    Uuid = captura.LigacaoId,
                     Metadata = captura.Metadata,
                     CriadoEm = DateTimeOffset.Now,
                     Duracao = captura.Duracao,
@@ -266,7 +337,7 @@ public sealed class QueueProcessor : IAsyncDisposable
                     CaminhoAudioCliente = captura.CaminhoCliente,
                 };
                 registro.MarcarRevisao(
-                    $"Processamento não concluído após {MaxTentativas} tentativa(s) — provável falta de memória na máquina. " +
+                    $"Processamento não concluído após {MaxTentativas} tentativa(s). " +
                     $"Último erro: {item.UltimoErro ?? "app encerrado inesperadamente"}. Áudio preservado em disco.");
 
                 registro.Id = _repo.SalvarRegistro(registro);
@@ -294,6 +365,11 @@ public sealed class QueueProcessor : IAsyncDisposable
 
         return new AudioCapture
         {
+            // Itens gravados antes da migração não têm ligacaoId: um id derivado do item
+            // mantém a chave de idempotência estável entre reinícios, que é o que importa.
+            LigacaoId = string.IsNullOrWhiteSpace(item.LigacaoId)
+                ? $"item-{item.Id}"
+                : item.LigacaoId!,
             CaminhoAtendente = item.CaminhoAudioAtendente,
             CaminhoCliente = item.CaminhoAudioCliente,
             IniciadaEm = iniciada,

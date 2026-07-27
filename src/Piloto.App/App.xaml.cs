@@ -6,6 +6,7 @@ using Piloto.App.Services;
 using Piloto.Bridge;
 using Piloto.Core.Abstractions;
 using Piloto.Core.Pipeline;
+using Piloto.Remote;
 
 namespace Piloto.App;
 
@@ -24,6 +25,7 @@ public partial class App : Application
     private MainWindow? _main;
     private ILogger<App>? _log;
     private Mutex? _mutex;
+    private DispatcherTimer? _saudeTimer;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -82,7 +84,13 @@ public partial class App : Application
                 _main!.MostrarStatus($"Chamada #{id} enfileirada — captura automática pela extensão."));
 
             queue.ItemIniciado += (_, id) => Dispatcher.Invoke(() =>
-                _main!.MostrarStatus($"Processando ligação #{id} em segundo plano — transcrição e resumo a caminho…"));
+                _main!.MostrarStatus($"Enviando a ligação #{id} para o servidor — transcrição a caminho…"));
+
+            // Servidor fora do ar não é perda: o atendente precisa ver isso escrito, com a
+            // hora da próxima tentativa, em vez de ficar sem notícia da ligação que gravou.
+            queue.EnvioAdiado += (_, e) => Dispatcher.Invoke(() =>
+                _main!.MostrarStatus(
+                    $"Servidor indisponível ({e.Motivo}). A ligação está guardada — nova tentativa às {e.Proxima:HH:mm:ss}."));
 
             queue.RegistroProcessado += (_, reg) => Dispatcher.Invoke(() =>
             {
@@ -98,6 +106,8 @@ public partial class App : Application
 
             queue.Iniciar();
 
+            IniciarMonitorDoServidor();
+
             _ = Task.Run(() => AplicarRetencao(repo));
 
             MostrarPrincipal();
@@ -111,6 +121,35 @@ public partial class App : Application
                 "Click Write", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
         }
+    }
+
+    /// <summary>
+    /// Consulta <c>/v1/saude</c> na subida e de dois em dois minutos. Duas coisas dependem
+    /// disso: o banner (o atendente sabe se o servidor está de pé) e as capacidades que o
+    /// transcritor usa para decidir se exibe o que veio pronto ou extrai localmente.
+    /// <para>Nunca bloqueia a subida: rede lenta não pode segurar a janela.</para>
+    /// </summary>
+    private void IniciarMonitorDoServidor()
+    {
+        var monitor = _provider!.GetRequiredService<ServidorSaudeMonitor>();
+
+        _saudeTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(2) };
+        _saudeTimer.Tick += (_, _) => ConsultarSaude(monitor);
+        _saudeTimer.Start();
+
+        ConsultarSaude(monitor);
+    }
+
+    private void ConsultarSaude(ServidorSaudeMonitor monitor)
+    {
+        _ = Task.Run(async () =>
+        {
+            try { await monitor.AtualizarAsync().ConfigureAwait(false); }
+            catch (Exception ex) { _log?.LogDebug(ex, "Falha ao consultar a saúde do servidor"); }
+
+            try { Dispatcher.Invoke(() => _main?.AtualizarBanner()); }
+            catch (TaskCanceledException) { /* app encerrando */ }
+        });
     }
 
     /// <summary>Grava o stack completo do erro de inicialização em um arquivo fácil de localizar.</summary>
@@ -174,6 +213,7 @@ public partial class App : Application
         {
             // Marca encerramento limpo: sem esta linha no log, o processo morreu (crash).
             _log?.LogInformation("Click Write encerrado normalmente");
+            _saudeTimer?.Stop();
             _tray?.Dispose();
             _provider?.DisposeAsync().AsTask().GetAwaiter().GetResult();
             _mutex?.Dispose();

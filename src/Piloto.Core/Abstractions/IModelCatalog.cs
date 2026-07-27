@@ -1,18 +1,17 @@
 namespace Piloto.Core.Abstractions;
 
 /// <summary>
-/// Verifica a presença dos modelos (Whisper GGML e LLM GGUF). Sem os modelos o app
-/// abre normalmente, mas a fila fica pausada com o aviso "modelos ausentes".
+/// Verifica a presença do modelo LLM (GGUF) em disco. Sem ele o app abre normalmente e as
+/// ligações continuam sendo transcritas — o resumo é que fica pendente até o modelo existir.
+/// <para>
+/// O Whisper saiu daqui na migração para o servidor: quem responde "dá para transcrever?"
+/// agora é <c>GET /v1/saude</c>, não a pasta de modelos.
+/// </para>
 /// </summary>
 public interface IModelCatalog
 {
-    bool WhisperDisponivel { get; }
     bool LlmDisponivel { get; }
 
-    /// <summary>True quando o pipeline pode rodar (Whisper presente; LLM pode estar desligado no config).</summary>
-    bool PipelinePronto { get; }
-
-    string? CaminhoWhisper { get; }
     string? CaminhoLlm { get; }
 
     /// <summary>
@@ -21,13 +20,6 @@ public interface IModelCatalog
     /// assim o mesmo instalador serve máquinas de 4 GB (Gemma 1B) e de 16 GB (Gemma 4B).
     /// </summary>
     IReadOnlyList<string> CandidatosLlm { get; }
-
-    /// <summary>
-    /// Candidatos a modelo Whisper (.bin da pasta de modelos), do maior para o menor —
-    /// no Whisper, maior é melhor. O transcritor usa o maior que couber na RAM da máquina
-    /// (medium nas de 12 GB, small nas de 4 GB).
-    /// </summary>
-    IReadOnlyList<string> CandidatosWhisper { get; }
 
     IReadOnlyList<string> ModelosAusentes();
 }

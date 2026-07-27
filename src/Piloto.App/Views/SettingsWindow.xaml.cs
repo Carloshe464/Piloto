@@ -4,6 +4,7 @@ using System.Windows;
 using Piloto.App.Services;
 using Piloto.Core.Abstractions;
 using Piloto.Core.Configuration;
+using Piloto.Remote;
 
 namespace Piloto.App.Views;
 
@@ -11,11 +12,13 @@ public partial class SettingsWindow : Window
 {
     private readonly ConfigService _config;
     private readonly IModelCatalog _modelos;
+    private readonly ServidorSaudeMonitor _servidor;
 
-    public SettingsWindow(ConfigService config, IModelCatalog modelos)
+    public SettingsWindow(ConfigService config, IModelCatalog modelos, ServidorSaudeMonitor servidor)
     {
         _config = config;
         _modelos = modelos;
+        _servidor = servidor;
         InitializeComponent();
         Carregar();
     }
@@ -34,25 +37,62 @@ public partial class SettingsWindow : Window
         TxtRetTransc.Text = s.RetencaoDias.Transcricao.ToString(CultureInfo.InvariantCulture);
         TxtPorta.Text = s.Bridge.Porta.ToString(CultureInfo.InvariantCulture);
 
-        TxtWhisperModelo.Text = s.Whisper.Modelo;
-        TxtWhisperThreads.Text = s.Whisper.Threads.ToString(CultureInfo.InvariantCulture);
+        TxtServidorUrl.Text = s.Servidor.Url;
+        TxtServidorToken.Password = s.Servidor.Token;
+        TxtServidorTimeout.Text = s.Servidor.TimeoutSegundos.ToString(CultureInfo.InvariantCulture);
+        TxtServidorTentativas.Text = s.Servidor.MaxTentativas.ToString(CultureInfo.InvariantCulture);
 
         ChkLlm.IsChecked = s.Llm.Habilitado;
         TxtLlmModelo.Text = s.Llm.Modelo;
         TxtLlmThreads.Text = s.Llm.Threads.ToString(CultureInfo.InvariantCulture);
         TxtLlmTemp.Text = s.Llm.Temperatura.ToString(CultureInfo.InvariantCulture);
 
-        AtualizarStatusModelos();
+        MostrarStatus();
     }
 
-    private void AtualizarStatusModelos()
+    /// <summary>
+    /// Estado do servidor e do modelo local. As duas capacidades (<c>analiseDisponivel</c>
+    /// e <c>resumoDisponivel</c>) aparecem porque são elas que explicam <b>quem</b> fez o
+    /// trabalho na última ligação — sem isso, "o resumo não veio" não tem diagnóstico.
+    /// </summary>
+    private void MostrarStatus()
     {
-        var whisper = _modelos.WhisperDisponivel ? "presente" : "AUSENTE";
         var llm = _modelos.LlmDisponivel ? "presente" : "AUSENTE";
-        TxtStatusModelos.Text =
-            $"Pasta de modelos: {_config.Settings.PastaModelos}\n" +
-            $"Whisper: {whisper}   •   LLM: {llm}\n" +
-            (_modelos.PipelinePronto ? "Pipeline pronto." : "Pipeline pausado — baixe/aponte os modelos.");
+        var linhas = new List<string> { $"Endereço: {_servidor.Endereco}" };
+
+        if (_servidor.UltimoErro is { } erro)
+        {
+            linhas.Add($"Estado: INDISPONÍVEL — {erro}");
+        }
+        else if (_servidor.Ultima is { } saude)
+        {
+            linhas.Add($"Estado: no ar — {saude.Descricao}");
+            linhas.Add($"Extração no servidor: {(saude.AnaliseDisponivel ? "sim" : "não (o app extrai localmente)")}"
+                       + $"   •   Resumo no servidor: {(saude.ResumoDisponivel ? "sim" : "não (LLM local)")}");
+            if (!saude.ContratoCompativel)
+                linhas.Add($"Atenção: contrato {saude.VersaoContrato ?? "?"} ≠ {Core.Models.ServidorSaude.ContratoSuportado} — campos e resumo do servidor serão ignorados.");
+        }
+        else
+        {
+            linhas.Add("Estado: ainda não consultado — use \"Testar conexão\".");
+        }
+
+        linhas.Add($"Modelo de resumo (local): {llm}   •   Pasta: {_config.Settings.PastaModelos}");
+        TxtStatusModelos.Text = string.Join("\n", linhas);
+    }
+
+    private async void TestarConexao_Click(object sender, RoutedEventArgs e)
+    {
+        // A URL/token editados aqui só valem no próximo início (o cliente HTTP é construído
+        // uma vez, na subida); o teste consulta o servidor em uso agora — que é justamente
+        // o que responde "salvei e continuo sem conexão?".
+        BtnTestar.IsEnabled = false;
+        try
+        {
+            await _servidor.AtualizarAsync().ConfigureAwait(true);
+            MostrarStatus();
+        }
+        finally { BtnTestar.IsEnabled = true; }
     }
 
     private void AbrirPastaModelos_Click(object sender, RoutedEventArgs e)
@@ -87,8 +127,10 @@ public partial class SettingsWindow : Window
             s.RetencaoDias.Audio = ParseInt(TxtRetAudio.Text, s.RetencaoDias.Audio);
             s.RetencaoDias.Transcricao = ParseInt(TxtRetTransc.Text, s.RetencaoDias.Transcricao);
             s.Bridge.Porta = ParseInt(TxtPorta.Text, s.Bridge.Porta);
-            s.Whisper.Modelo = TxtWhisperModelo.Text.Trim();
-            s.Whisper.Threads = ParseInt(TxtWhisperThreads.Text, s.Whisper.Threads);
+            s.Servidor.Url = TxtServidorUrl.Text.Trim();
+            s.Servidor.Token = TxtServidorToken.Password.Trim();
+            s.Servidor.TimeoutSegundos = ParseInt(TxtServidorTimeout.Text, s.Servidor.TimeoutSegundos);
+            s.Servidor.MaxTentativas = ParseInt(TxtServidorTentativas.Text, s.Servidor.MaxTentativas);
             s.Llm.Habilitado = ChkLlm.IsChecked == true;
             s.Llm.Modelo = TxtLlmModelo.Text.Trim();
             s.Llm.Threads = ParseInt(TxtLlmThreads.Text, s.Llm.Threads);

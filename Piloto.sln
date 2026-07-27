@@ -22,6 +22,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.Tests", "tests\Pilot
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.LlmWorker", "src\Piloto.LlmWorker\Piloto.LlmWorker.csproj", "{A1000001-0000-0000-0000-00000000000A}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.Remote", "src\Piloto.Remote\Piloto.Remote.csproj", "{A1000001-0000-0000-0000-00000000000B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -68,6 +70,10 @@ Global
 		{A1000001-0000-0000-0000-00000000000A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1000001-0000-0000-0000-00000000000A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1000001-0000-0000-0000-00000000000A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1000001-0000-0000-0000-00000000000B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1000001-0000-0000-0000-00000000000B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1000001-0000-0000-0000-00000000000B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1000001-0000-0000-0000-00000000000B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

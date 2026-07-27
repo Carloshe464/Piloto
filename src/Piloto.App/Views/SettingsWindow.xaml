@@ -15,10 +15,12 @@
 
         <Border Grid.Row="0" Style="{StaticResource Card}" Margin="0,0,0,10">
             <StackPanel>
-                <TextBlock Text="MODELOS DE IA" Style="{StaticResource Rotulo}" Margin="0,0,0,6" />
+                <TextBlock Text="SERVIDOR DE TRANSCRIÇÃO" Style="{StaticResource Rotulo}" Margin="0,0,0,6" />
                 <TextBlock x:Name="TxtStatusModelos" TextWrapping="Wrap" />
-                <Button Content="Abrir pasta de modelos" Click="AbrirPastaModelos_Click"
-                        HorizontalAlignment="Left" Margin="0,10,0,0" />
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <Button Content="Testar conexão" Click="TestarConexao_Click" x:Name="BtnTestar" />
+                    <Button Content="Abrir pasta de modelos" Click="AbrirPastaModelos_Click" Margin="8,0,0,0" />
+                </StackPanel>
             </StackPanel>
         </Border>
 
@@ -33,7 +35,7 @@
                 <TextBlock Text="Listas fechadas — status (um por linha)" Style="{StaticResource Rotulo}" />
                 <TextBox x:Name="TxtStatus" AcceptsReturn="True" Height="90" VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap" />
 
-                <TextBlock Text="Glossário (initial_prompt do Whisper)" Style="{StaticResource Rotulo}" />
+                <TextBlock Text="Glossário (initial_prompt da transcrição)" Style="{StaticResource Rotulo}" />
                 <TextBox x:Name="TxtGlossario" AcceptsReturn="True" Height="70" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" />
 
                 <Grid Margin="0,4,0,0">
@@ -56,18 +58,26 @@
                     </StackPanel>
                 </Grid>
 
+                <TextBlock Text="Servidor de transcrição (URL)" Style="{StaticResource Rotulo}" Margin="0,14,0,0" />
+                <TextBox x:Name="TxtServidorUrl" />
+
                 <Grid Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="2*" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                        <TextBlock Text="Modelo Whisper (arquivo)" Style="{StaticResource Rotulo}" />
-                        <TextBox x:Name="TxtWhisperModelo" />
+                        <TextBlock Text="Token (um por máquina)" Style="{StaticResource Rotulo}" />
+                        <PasswordBox x:Name="TxtServidorToken" />
                     </StackPanel>
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="Whisper threads" Style="{StaticResource Rotulo}" />
-                        <TextBox x:Name="TxtWhisperThreads" />
+                    <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                        <TextBlock Text="Timeout (s)" Style="{StaticResource Rotulo}" />
+                        <TextBox x:Name="TxtServidorTimeout" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Máx. tentativas" Style="{StaticResource Rotulo}" />
+                        <TextBox x:Name="TxtServidorTentativas" />
                     </StackPanel>
                 </Grid>
 
@@ -92,7 +102,7 @@
                     </StackPanel>
                 </Grid>
 
-                <TextBlock Text="Alterações de porta e de modelo passam a valer no próximo início do app."
+                <TextBlock Text="Alterações de porta, de endereço do servidor e de modelo passam a valer no próximo início do app. As listas fechadas e o glossário valem já na próxima ligação — eles viajam junto com o áudio."
                            Foreground="{StaticResource TextoFraco}" Margin="0,12,0,0" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>

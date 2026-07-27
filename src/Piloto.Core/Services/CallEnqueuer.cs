@@ -18,6 +18,7 @@ public sealed class CallEnqueuer
     {
         var item = new QueueItem
         {
+            LigacaoId = captura.LigacaoId,
             CaminhoAudioAtendente = captura.CaminhoAtendente,
             CaminhoAudioCliente = captura.CaminhoCliente,
             MetadataJson = JsonSerializer.Serialize(captura.Metadata),
@@ -31,12 +32,16 @@ public sealed class CallEnqueuer
     /// Reenfileira uma ligação já processada a partir dos MESMOS WAVs (retidos por 30 dias).
     /// O item nasce com <see cref="QueueItem.RegistroId"/> apontando para o registro
     /// original: ao concluir, o processador atualiza a ligação em lugar — id/uuid estáveis,
-    /// nada duplicado. Uso típico: retestar com outro modelo/versão ou com a máquina folgada.
+    /// nada duplicado. Uso típico: retestar com outro modelo/versão ou com o servidor de volta.
     /// </summary>
     public long Reprocessar(CallRecord registro)
     {
         var item = new QueueItem
         {
+            // Identidade NOVA de propósito: reprocessar existe para pedir trabalho novo ao
+            // servidor. Com a chave antiga, a idempotência devolveria o resultado velho e o
+            // botão não faria nada visível. O registro continua sendo o mesmo (RegistroId).
+            LigacaoId = Guid.NewGuid().ToString("N"),
             CaminhoAudioAtendente = registro.CaminhoAudioAtendente ?? "",
             CaminhoAudioCliente = registro.CaminhoAudioCliente ?? "",
             MetadataJson = JsonSerializer.Serialize(registro.Metadata),
