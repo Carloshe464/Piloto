@@ -176,10 +176,15 @@ begin
   { Script de download de modelos: não há mais o que baixar. }
   DelTree(App + '\scripts\download-models.ps1', False, True, False);
 
-  { Modelos (~2,6 GB). Só funciona quando quem instala é o próprio usuário do
-    computador: com PrivilegesRequired=admin, {localappdata} pode apontar para o
-    perfil do administrador, e não para o do atendente. Por isso o aplicativo
-    repete esta limpeza na primeira abertura, aí sim rodando como o usuário certo. }
+  (* Modelos (~2,6 GB). Só funciona quando quem instala é o próprio usuário do
+     computador: com PrivilegesRequired=admin, a constante localappdata pode
+     apontar para o perfil do administrador, e não para o do atendente. Por isso
+     o aplicativo repete esta limpeza na primeira abertura, aí sim rodando como
+     o usuário certo.
+
+     Comentário em (* *) de propósito: chave não aninha em Pascal, e a constante
+     escrita entre chaves aqui dentro fecharia o comentário no meio da frase —
+     o resto do texto viraria código e o compilador quebraria. *)
   Modelos := ExpandConstant('{localappdata}\{#NomeAntigo}\models');
   if DirExists(Modelos) then
     DelTree(Modelos, True, True, True);
