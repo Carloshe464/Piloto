@@ -91,6 +91,127 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Executar o {#MyAppName} agora";
   Flags: nowait postinstall skipifsilent
 
 [Code]
+var
+  PaginaServidor: TInputQueryWizardPage;
+
+{ Pergunta o endereço do servidor e o token do atendente.
+
+  Existe para que ninguém precise editar JSON com permissão de administrador depois de
+  instalar. O instalador NÃO escreve a configuração do usuário direto: ele roda elevado,
+  e localappdata sob elevação aponta para o perfil do administrador, não para o do
+  atendente. Então grava servidor.json na pasta do programa e o app aplica na primeira
+  abertura, já rodando como o usuário certo.
+
+  Em instalação silenciosa (GPO), os valores vêm por /SERVIDOR= e /TOKEN=. }
+procedure CriarPaginaServidor();
+begin
+  PaginaServidor := CreateInputQueryPage(wpSelectTasks,
+    'Servidor de transcrição',
+    'Onde esta máquina envia as ligações',
+    'O Click Write grava a ligação e envia para o servidor, que devolve a transcrição e ' +
+    'o resumo. Informe o endereço do servidor e o token deste atendente. ' +
+    'Ambos podem ser alterados depois em Configurações.');
+
+  PaginaServidor.Add('Endereço do servidor (ex.: http://192.168.0.10:8517)', False);
+  PaginaServidor.Add('Token deste atendente', False);
+
+  PaginaServidor.Values[0] := ExpandConstant('{param:SERVIDOR|http://servidor:8517}');
+  PaginaServidor.Values[1] := ExpandConstant('{param:TOKEN|}');
+end;
+
+{ Testa o endereço antes de deixar avançar. Alcançar e ser recusado é um problema
+  diferente de não alcançar, e cada um manda procurar num lugar diferente — dizer qual
+  dos dois é economiza a ida e volta de descobrir isso depois de instalar. }
+function TestarServidor(Url, Token: String; var Mensagem: String): Boolean;
+var
+  Http: Variant;
+  Status: Integer;
+begin
+  Result := False;
+  try
+    Http := CreateOleObject('WinHttp.WinHttpRequest.5.1');
+    Http.SetTimeouts(5000, 8000, 8000, 8000);
+    Http.Open('GET', Url + '/v1/health', False);
+    if Token <> '' then
+      Http.SetRequestHeader('X-Token', Token);
+    Http.Send('');
+    Status := Http.Status;
+
+    if (Status >= 200) and (Status < 300) then
+    begin
+      Result := True;
+      Mensagem := '';
+    end
+    else if Status = 401 then
+      Mensagem := 'O servidor respondeu, mas recusou o token.' + #13#10 +
+                  'Confira o token com quem administra o servidor.'
+    else
+      Mensagem := 'O servidor respondeu HTTP ' + IntToStr(Status) + '.' + #13#10 +
+                  'Confira o endereço informado.';
+  except
+    Mensagem := 'Não foi possível alcançar o servidor neste endereço.' + #13#10 +
+                'Verifique o endereço, a rede e se o servidor está ligado.';
+  end;
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  Url, Token, Erro: String;
+begin
+  Result := True;
+  if CurPageID <> PaginaServidor.ID then
+    Exit;
+
+  Url := Trim(PaginaServidor.Values[0]);
+  Token := Trim(PaginaServidor.Values[1]);
+
+  if Url = '' then
+  begin
+    MsgBox('Informe o endereço do servidor.', mbError, MB_OK);
+    Result := False;
+    Exit;
+  end;
+
+  if TestarServidor(Url, Token, Erro) then
+    Exit;
+
+  { Instalar com a máquina offline é legítimo — a configuração fica gravada e passa a
+    valer quando a rede voltar. O aviso informa, não bloqueia. }
+  Result := MsgBox(Erro + #13#10 + #13#10 +
+                   'Instalar assim mesmo? A configuração fica salva e pode ser ' +
+                   'corrigida depois em Configurações.',
+                   mbConfirmation, MB_YESNO) = IDYES;
+end;
+
+function EscaparJson(Valor: String): String;
+begin
+  StringChangeEx(Valor, '\', '\\', True);
+  StringChangeEx(Valor, '"', '\"', True);
+  Result := Valor;
+end;
+
+{ Grava o que foi perguntado. O app lê na primeira abertura e aplica à configuração do
+  usuário — comparando a data deste arquivo, para não sobrescrever o que o atendente
+  ajustar depois na tela. }
+procedure GravarConfiguracaoServidor();
+var
+  Destino, Conteudo: String;
+begin
+  if not Assigned(PaginaServidor) then
+    Exit;
+
+  Destino := ExpandConstant('{app}\config\servidor.json');
+  ForceDirectories(ExpandConstant('{app}\config'));
+
+  Conteudo :=
+    '{' + #13#10 +
+    '  "url": "' + EscaparJson(Trim(PaginaServidor.Values[0])) + '",' + #13#10 +
+    '  "token": "' + EscaparJson(Trim(PaginaServidor.Values[1])) + '"' + #13#10 +
+    '}' + #13#10;
+
+  SaveStringToFile(Destino, Conteudo, False);
+end;
+
 { Fecha o app automaticamente antes de atualizar/desinstalar, com confirmação.
   Sem isso, o app na bandeja (que só se esconde ao fechar a janela) travaria os
   arquivos e a atualização falharia com "arquivo em uso".
@@ -122,6 +243,11 @@ end;
 function InitializeSetup(): Boolean;
 begin
   Result := FecharAppSeNecessario();
+end;
+
+procedure InitializeWizard();
+begin
+  CriarPaginaServidor();
 end;
 
 function InitializeUninstall(): Boolean;
@@ -194,6 +320,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
+    GravarConfiguracaoServidor();
     LimparInstalacaoAntiga();
     LimparInferenciaLocal();
   end;

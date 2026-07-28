@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Net.Http;
 using System.Windows;
 using Piloto.App.Services;
 using Piloto.Core.Abstractions;
@@ -34,13 +35,8 @@ public partial class SettingsWindow : Window
         TxtRetTransc.Text = s.RetencaoDias.Transcricao.ToString(CultureInfo.InvariantCulture);
         TxtPorta.Text = s.Bridge.Porta.ToString(CultureInfo.InvariantCulture);
 
-        TxtWhisperModelo.Text = s.Whisper.Modelo;
-        TxtWhisperThreads.Text = s.Whisper.Threads.ToString(CultureInfo.InvariantCulture);
-
-        ChkLlm.IsChecked = s.Llm.Habilitado;
-        TxtLlmModelo.Text = s.Llm.Modelo;
-        TxtLlmThreads.Text = s.Llm.Threads.ToString(CultureInfo.InvariantCulture);
-        TxtLlmTemp.Text = s.Llm.Temperatura.ToString(CultureInfo.InvariantCulture);
+        TxtServidorUrl.Text = s.Servidor.Url;
+        TxtServidorToken.Text = s.Servidor.Token;
 
         AtualizarStatusModelos();
     }
@@ -65,6 +61,41 @@ public partial class SettingsWindow : Window
             (retidas > 0
                 ? $"{retidas} ligação(ões) guardada(s) nesta máquina, aguardando envio."
                 : "Nada pendente de envio.");
+    }
+
+    /// <summary>
+    /// Testa o endereço e o token <b>digitados</b>, não os salvos: o atendente precisa
+    /// saber se o dado novo funciona antes de gravá-lo por cima do que funcionava.
+    /// Distingue as três falhas que importam — não alcança, alcança e recusa, alcança e
+    /// aceita — porque cada uma manda procurar num lugar diferente.
+    /// </summary>
+    private async void TestarConexao_Click(object sender, RoutedEventArgs e)
+    {
+        var url = TxtServidorUrl.Text.Trim().TrimEnd('/');
+        var token = TxtServidorToken.Text.Trim();
+        TxtStatusModelos.Text = $"Servidor: {url}\ntestando…";
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            if (!string.IsNullOrWhiteSpace(token))
+                http.DefaultRequestHeaders.Add("X-Token", token);
+
+            using var r = await http.GetAsync($"{url}/v1/health");
+            TxtStatusModelos.Text = (int)r.StatusCode switch
+            {
+                401 => $"Servidor: {url}\nO servidor respondeu, mas RECUSOU o token.\n"
+                       + "Confira o token com quem administra o servidor.",
+                >= 200 and < 300 => $"Servidor: {url}\nConexão OK — servidor respondendo e token aceito.",
+                var c => $"Servidor: {url}\nRespondeu HTTP {c}. Confira o endereço.",
+            };
+        }
+        catch (Exception ex)
+        {
+            TxtStatusModelos.Text =
+                $"Servidor: {url}\nNÃO FOI POSSÍVEL ALCANÇAR o servidor.\n{ex.Message}\n"
+                + "Verifique o endereço, a rede e se o servidor está ligado.";
+        }
     }
 
     private void AbrirPastaModelos_Click(object sender, RoutedEventArgs e)
@@ -102,12 +133,11 @@ public partial class SettingsWindow : Window
             s.RetencaoDias.Audio = ParseInt(TxtRetAudio.Text, s.RetencaoDias.Audio);
             s.RetencaoDias.Transcricao = ParseInt(TxtRetTransc.Text, s.RetencaoDias.Transcricao);
             s.Bridge.Porta = ParseInt(TxtPorta.Text, s.Bridge.Porta);
-            s.Whisper.Modelo = TxtWhisperModelo.Text.Trim();
-            s.Whisper.Threads = ParseInt(TxtWhisperThreads.Text, s.Whisper.Threads);
-            s.Llm.Habilitado = ChkLlm.IsChecked == true;
-            s.Llm.Modelo = TxtLlmModelo.Text.Trim();
-            s.Llm.Threads = ParseInt(TxtLlmThreads.Text, s.Llm.Threads);
-            s.Llm.Temperatura = ParseFloat(TxtLlmTemp.Text, s.Llm.Temperatura);
+            s.Servidor.Url = TxtServidorUrl.Text.Trim();
+            s.Servidor.Token = TxtServidorToken.Text.Trim();
+            // Edição manual vence o provisionamento: sem carimbar a data, a próxima
+            // abertura reaplicaria o arquivo do instalador por cima do que foi digitado.
+            s.Servidor.ProvisionadoEm = DateTimeOffset.UtcNow;
             _config.SalvarSettings(s);
 
             DialogResult = true;
@@ -130,7 +160,4 @@ public partial class SettingsWindow : Window
 
     private static int ParseInt(string texto, int fallback)
         => int.TryParse(texto.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : fallback;
-
-    private static float ParseFloat(string texto, float fallback)
-        => float.TryParse(texto.Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : fallback;
 }

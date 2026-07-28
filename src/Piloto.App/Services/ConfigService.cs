@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Piloto.Core.Configuration;
 
 namespace Piloto.App.Services;
@@ -39,7 +40,17 @@ public sealed class ConfigService
         }
 
         var settings = AppSettings.Load(Path.Combine(userDir, "appsettings.json"));
-        return new ConfigService(userDir, settings);
+        var servico = new ConfigService(userDir, settings);
+        servico.AplicarProvisionamento(bundledDir);
+        return servico;
+    }
+
+    /// <summary>Aplica o que o instalador perguntou ao operador. Ver
+    /// <see cref="ProvisionamentoServidor"/> para o porquê deste caminho indireto.</summary>
+    private void AplicarProvisionamento(string bundledDir)
+    {
+        if (ProvisionamentoServidor.Aplicar(Settings, Path.Combine(bundledDir, "servidor.json")))
+            SalvarSettings(Settings);
     }
 
     public ListasFechadas CarregarListas() => ListasFechadas.Load(CaminhoListas);

@@ -15,10 +15,12 @@
 
         <Border Grid.Row="0" Style="{StaticResource Card}" Margin="0,0,0,10">
             <StackPanel>
-                <TextBlock Text="MODELOS DE IA" Style="{StaticResource Rotulo}" Margin="0,0,0,6" />
+                <TextBlock Text="SERVIDOR DE TRANSCRIÇÃO" Style="{StaticResource Rotulo}" Margin="0,0,0,6" />
                 <TextBlock x:Name="TxtStatusModelos" TextWrapping="Wrap" />
-                <Button Content="Abrir pasta de modelos" Click="AbrirPastaModelos_Click"
-                        HorizontalAlignment="Left" Margin="0,10,0,0" />
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <Button Content="Testar conexão" Click="TestarConexao_Click" />
+                    <Button Content="Abrir pasta de dados" Click="AbrirPastaModelos_Click" Margin="8,0,0,0" />
+                </StackPanel>
             </StackPanel>
         </Border>
 
@@ -56,43 +58,15 @@
                     </StackPanel>
                 </Grid>
 
-                <Grid Margin="0,4,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                        <TextBlock Text="Modelo Whisper (arquivo)" Style="{StaticResource Rotulo}" />
-                        <TextBox x:Name="TxtWhisperModelo" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="Whisper threads" Style="{StaticResource Rotulo}" />
-                        <TextBox x:Name="TxtWhisperThreads" />
-                    </StackPanel>
-                </Grid>
+                <TextBlock Text="Endereço do servidor de transcrição" Style="{StaticResource Rotulo}" Margin="0,14,0,0" />
+                <TextBox x:Name="TxtServidorUrl" />
 
-                <CheckBox x:Name="ChkLlm" Content="Habilitar camada LLM (resumo)" Margin="0,14,0,0" />
-                <Grid Margin="0,4,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2*" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                        <TextBlock Text="Modelo LLM (arquivo)" Style="{StaticResource Rotulo}" />
-                        <TextBox x:Name="TxtLlmModelo" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Margin="0,0,8,0">
-                        <TextBlock Text="LLM threads" Style="{StaticResource Rotulo}" />
-                        <TextBox x:Name="TxtLlmThreads" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="2">
-                        <TextBlock Text="Temperatura" Style="{StaticResource Rotulo}" />
-                        <TextBox x:Name="TxtLlmTemp" />
-                    </StackPanel>
-                </Grid>
+                <TextBlock Text="Token deste atendente" Style="{StaticResource Rotulo}" />
+                <TextBox x:Name="TxtServidorToken" />
+                <TextBlock Text="O token identifica esta máquina no servidor. Foi pedido durante a instalação; troque aqui se o servidor emitir outro."
+                           Foreground="{StaticResource TextoFraco}" Margin="0,4,0,0" TextWrapping="Wrap" />
 
-                <TextBlock Text="Alterações de porta e de modelo passam a valer no próximo início do app."
+                <TextBlock Text="Modelo, threads e temperatura deixaram de existir aqui: quem transcreve e resume é o servidor. Alterações de porta passam a valer no próximo início do app."
                            Foreground="{StaticResource TextoFraco}" Margin="0,12,0,0" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>

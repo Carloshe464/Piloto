@@ -188,7 +188,7 @@ public partial class App : Application
     {
         try
         {
-            var modelos = _config!.Settings.PastaModelos;
+            var modelos = _config!.Settings.PastaModelosLegado;
             if (!Directory.Exists(modelos))
                 return;
 

@@ -12,9 +12,6 @@ public sealed class AppSettings
     public ServidorSettings Servidor { get; set; } = new();
     public BridgeSettings Bridge { get; set; } = new();
     public AudioSettings Audio { get; set; } = new();
-    public WhisperSettings Whisper { get; set; } = new();
-    public LlmSettings Llm { get; set; } = new();
-    public FilaSettings Fila { get; set; } = new();
     public RetencaoSettings RetencaoDias { get; set; } = new();
 
     /// <summary>Pode conter variáveis de ambiente no formato %VAR% (Windows).</summary>
@@ -24,20 +21,16 @@ public sealed class AppSettings
     [JsonIgnore]
     public string PastaDadosExpandida => Environment.ExpandEnvironmentVariables(PastaDados);
 
+    /// <summary>Pasta dos modelos das versões anteriores (~2,6 GB). Existe apenas para o
+    /// app apagá-la na primeira abertura depois da atualização.</summary>
     [JsonIgnore]
-    public string PastaModelos => Path.Combine(PastaDadosExpandida, "models");
+    public string PastaModelosLegado => Path.Combine(PastaDadosExpandida, "models");
 
     [JsonIgnore]
     public string PastaAudio => Path.Combine(PastaDadosExpandida, "audio");
 
     [JsonIgnore]
     public string CaminhoBanco => Path.Combine(PastaDadosExpandida, "piloto.db");
-
-    [JsonIgnore]
-    public string CaminhoModeloWhisper => Path.Combine(PastaModelos, Whisper.Modelo);
-
-    [JsonIgnore]
-    public string CaminhoModeloLlm => Path.Combine(PastaModelos, Llm.Modelo);
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -99,6 +92,20 @@ public sealed class ServidorSettings
 
     /// <summary>De quanto em quanto tempo pergunta ao servidor se o resultado ficou pronto.</summary>
     public int IntervaloConsultaSegundos { get; set; } = 10;
+
+    /// <summary>
+    /// Quando o endereço e o token foram aplicados a partir do arquivo deixado pelo
+    /// instalador.
+    /// <para>
+    /// Existe porque a configuração do usuário vive em %LOCALAPPDATA% e o instalador roda
+    /// elevado, possivelmente noutro perfil — ele não consegue escrever ali. O instalador
+    /// grava na pasta do programa e o app aplica na primeira abertura, já como o usuário
+    /// certo. Comparar com a data do arquivo é o que impede duas coisas ao mesmo tempo:
+    /// reaplicar a cada abertura, sobrescrevendo o que o atendente ajustou na tela; e
+    /// ignorar uma reinstalação feita para trocar o servidor.
+    /// </para>
+    /// </summary>
+    public DateTimeOffset? ProvisionadoEm { get; set; }
 }
 
 public sealed class BridgeSettings
@@ -113,36 +120,9 @@ public sealed class AudioSettings
     public int TaxaHz { get; set; } = 16000;
 }
 
-public sealed class WhisperSettings
-{
-    public string Modelo { get; set; } = "ggml-small-q5_1.bin";
-    public string Idioma { get; set; } = "pt";
-
-    /// <summary>0 = automático (metade dos threads lógicos da máquina, entre 2 e 8).</summary>
-    public int Threads { get; set; } = 0;
-}
-
-public sealed class LlmSettings
-{
-    public bool Habilitado { get; set; } = true;
-    public string Modelo { get; set; } = "gemma-3-4b-it-Q4_K_M.gguf";
-    public float Temperatura { get; set; } = 0f;
-
-    /// <summary>0 = automático (metade dos threads lógicos da máquina, entre 2 e 8).</summary>
-    public int Threads { get; set; } = 0;
-
-    public int Contexto { get; set; } = 4096;
-
-    /// <summary>Força a saída JSON por gramática GBNF. Válvula de escape: desligue se a
-    /// gramática causar problema em campo — o parser tolerante + grounding seguram o resto.</summary>
-    public bool Gramatica { get; set; } = true;
-}
-
-public sealed class FilaSettings
-{
-    public int Simultaneas { get; set; } = 1;
-    public string PrioridadeProcesso { get; set; } = "BelowNormal";
-}
+// WhisperSettings, LlmSettings e FilaSettings saíram na 1.1: modelo, threads,
+// temperatura e paralelismo são decisões do servidor, e mantê-los aqui só ofereceria
+// ao atendente controles que não fazem nada.
 
 public sealed class RetencaoSettings
 {
