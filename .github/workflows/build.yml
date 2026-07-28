@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [main]
+    branches: [main, servidor]
     tags: ["v*"]
   pull_request:
 
@@ -39,14 +39,9 @@ jobs:
           --self-contained true -p:PublishSingleFile=false
           -o publish/
 
-      # O worker vai para a MESMA pasta: Piloto.LlmWorker.exe fica ao lado do ClickWrite.exe
-      # (é onde o app o procura) e compartilha o runtime e os nativos do LLamaSharp já
-      # publicados — mesmas versões de pacote, arquivos idênticos.
-      - name: Publish LLM worker (processo isolado)
-        run: >
-          dotnet publish src/Piloto.LlmWorker -c Release -r win-x64
-          --self-contained true -p:PublishSingleFile=false
-          -o publish/
+      # O worker de LLM deixou de ser publicado na 1.1: a inferência acontece no servidor.
+      # Publicá-lo aqui seria trabalho perdido — o próprio instalador o apaga depois de
+      # instalar, junto com as nativas do llama.cpp que o antivírus bloqueava.
 
       - name: Instalador (Inno Setup)
         run: |

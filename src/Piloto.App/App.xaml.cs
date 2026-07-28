@@ -69,11 +69,22 @@ public partial class App : Application
             // Máquina desligada com ligação retida, ou servidor que passou a noite fora:
             // sobe o que ficou para trás assim que o app abre, sem esperar o timer.
             var uploader = _provider.GetRequiredService<ClickWriteUploader>();
+            var sincronizador = _provider.GetRequiredService<SincronizadorServidor>();
+
             var retidas = uploader.PendentesEmDisco();
             if (retidas > 0)
             {
                 _log.LogInformation("{Retidas} ligação(ões) retida(s) em disco — reenviando", retidas);
                 _ = Task.Run(() => uploader.DrenarPendentesAsync());
+            }
+
+            // Máquina que passou a noite desligada: o servidor já terminou de processar,
+            // e o resultado precisa ser buscado agora, sem esperar o primeiro ciclo.
+            var aguardando = sincronizador.AguardandoResultado();
+            if (aguardando > 0)
+            {
+                _log.LogInformation("{Aguardando} ligação(ões) aguardando resultado do servidor", aguardando);
+                _ = Task.Run(() => sincronizador.VerificarAsync());
             }
 
             _main = _provider.GetRequiredService<MainWindow>();
@@ -94,14 +105,8 @@ public partial class App : Application
             coordinator.ChamadaEnviada += (_, resposta) => Dispatcher.Invoke(() =>
             {
                 var fila = resposta.Posicao is > 0 ? $" (posição {resposta.Posicao} na fila)" : "";
-                _main!.MostrarStatus($"Ligação enviada ao servidor{fila}.");
-                _tray?.Notificar("Click Write", $"Ligação enviada{fila}.");
-
-                // O aplicativo não desenha tela de resultado: quem exibe é o servidor.
-                if (_config.Settings.Servidor.AbrirResultadoNoNavegador)
-                    AbrirNoNavegador(
-                        _provider!.GetRequiredService<ClickWriteUploader>()
-                                  .UrlDoResultado(resposta.CallId));
+                _main!.MostrarStatus(
+                    $"Ligação enviada ao servidor{fila} — transcrição e resumo a caminho…");
             });
 
             coordinator.EnvioAdiado += (_, pasta) => Dispatcher.Invoke(() =>
@@ -112,16 +117,22 @@ public partial class App : Application
                                  $"A ligação ficou guardada em {pasta} e sobe automaticamente.");
             });
 
-            queue.ItemIniciado += (_, id) => Dispatcher.Invoke(() =>
-                _main!.MostrarStatus($"Processando ligação #{id} em segundo plano — transcrição e resumo a caminho…"));
-
-            queue.RegistroProcessado += (_, reg) => Dispatcher.Invoke(() =>
+            // O resultado chega do servidor e é gravado no banco local pelo sincronizador.
+            // Daqui para frente é exatamente o mesmo caminho de antes: a lista recarrega e
+            // a janela de detalhe lê o CallRecord. Nada muda na visualização.
+            sincronizador.RegistroPronto += (_, reg) => Dispatcher.Invoke(() =>
             {
                 _tray!.Notificar("Click Write", reg.PrecisaRevisao
                     ? "Nova transcrição pronta — precisa de revisão"
                     : "Nova transcrição pronta");
                 _main!.MostrarStatus($"Ligação #{reg.Id} pronta — transcrição e resumo disponíveis.");
                 _main!.Recarregar();
+            });
+
+            sincronizador.ProcessamentoFalhou += (_, erro) => Dispatcher.Invoke(() =>
+            {
+                _tray!.Notificar("Click Write — falha no servidor", erro);
+                _main!.MostrarStatus($"O servidor não conseguiu processar a ligação: {erro}");
             });
 
             try { bridge.Iniciar(); }
@@ -193,23 +204,6 @@ public partial class App : Application
         {
             // Espaço em disco não vale derrubar a abertura do app.
             _log?.LogWarning(e, "Não foi possível remover os modelos locais");
-        }
-    }
-
-    /// <summary>
-    /// Abre a tela do servidor. Falha aqui é cosmética: a ligação já foi aceita e o
-    /// registro existe — não vale derrubar o app porque o navegador não abriu.
-    /// </summary>
-    private void AbrirNoNavegador(string url)
-    {
-        try
-        {
-            System.Diagnostics.Process.Start(
-                new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
-        }
-        catch (Exception e)
-        {
-            _log?.LogWarning(e, "Não foi possível abrir {Url}", url);
         }
     }
 

@@ -58,6 +58,7 @@ public static class CompositionRoot
         // ainda os referenciam; sem nada sendo enfileirado, a fila fica ociosa.
         // Eles saem junto com a reescrita dessas telas.
         services.AddSingleton<ClickWriteUploader>();
+        services.AddSingleton<SincronizadorServidor>();
         services.AddSingleton(sp => new ZendeskBridgeServer(
             settings.Bridge.Porta, sp.GetRequiredService<ILogger<ZendeskBridgeServer>>()));
 

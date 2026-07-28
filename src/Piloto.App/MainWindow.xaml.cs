@@ -18,7 +18,7 @@ public partial class MainWindow : Window
     private readonly IExporter _exporter;
     private readonly IModelCatalog _modelos;
     private readonly RecordingCoordinator _coordinator;
-    private readonly Core.Services.CallEnqueuer _enqueuer;
+    private readonly Core.Services.ClickWriteUploader _uploader;
     private readonly ConfigService _config;
     private readonly ILogger<MainWindow> _log;
 
@@ -30,7 +30,7 @@ public partial class MainWindow : Window
         IExporter exporter,
         IModelCatalog modelos,
         RecordingCoordinator coordinator,
-        Core.Services.CallEnqueuer enqueuer,
+        Core.Services.ClickWriteUploader uploader,
         ConfigService config,
         ILogger<MainWindow> log)
     {
@@ -38,7 +38,7 @@ public partial class MainWindow : Window
         _exporter = exporter;
         _modelos = modelos;
         _coordinator = coordinator;
-        _enqueuer = enqueuer;
+        _uploader = uploader;
         _config = config;
         _log = log;
 
@@ -133,7 +133,7 @@ public partial class MainWindow : Window
         var registro = _repo.ObterRegistro(linha.Id);
         if (registro is null) return;
 
-        var win = new DetailWindow(registro, _exporter, _enqueuer) { Owner = this };
+        var win = new DetailWindow(registro, _exporter, _uploader) { Owner = this };
         win.ShowDialog();
         Recarregar(); // um reprocessamento pode ter sido enfileirado no detalhe
     }

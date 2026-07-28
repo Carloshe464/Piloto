@@ -18,5 +18,23 @@ public sealed class LlmSummary
     public string? Pedido { get; set; }
     public string? ProximoPasso { get; set; }
 
+    /// <summary>
+    /// Como o cliente saiu da ligação: <c>satisfeito</c>, <c>com_duvidas</c> ou <c>triste</c>.
+    /// <para>
+    /// Vem do servidor e é persistido, mas <b>ainda não aparece na tela</b> — a janela de
+    /// detalhe não tem campo para ele. Guardado desde já para não perder o histórico: quando
+    /// a tela ganhar o campo, os registros antigos já terão o dado.
+    /// </para>
+    /// </summary>
+    public string? Satisfacao { get; set; }
+
+    /// <summary>Se o problema foi resolvido na própria ligação. Mesma situação da
+    /// <see cref="Satisfacao"/>: persistido, ainda sem lugar na tela.</summary>
+    public bool? ProblemaResolvido { get; set; }
+
+    /// <summary>Quem estava do outro lado da linha, com o papel quando identificado
+    /// ("Ana da Silva (terceiro)").</summary>
+    public string? QuemLigou { get; set; }
+
     public static LlmSummary Vazio() => new();
 }

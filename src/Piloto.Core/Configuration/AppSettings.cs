@@ -97,8 +97,8 @@ public sealed class ServidorSettings
     /// </summary>
     public int MaxTentativas { get; set; } = 10;
 
-    /// <summary>Abre a tela do servidor no navegador quando a ligação é aceita.</summary>
-    public bool AbrirResultadoNoNavegador { get; set; } = true;
+    /// <summary>De quanto em quanto tempo pergunta ao servidor se o resultado ficou pronto.</summary>
+    public int IntervaloConsultaSegundos { get; set; } = 10;
 }
 
 public sealed class BridgeSettings

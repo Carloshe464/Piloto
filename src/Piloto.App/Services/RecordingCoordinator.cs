@@ -17,6 +17,7 @@ public sealed class RecordingCoordinator
     private readonly IAudioRecorder _recorder;
     private readonly ExtensionAudioRecorder _extensao;
     private readonly ClickWriteUploader _uploader;
+    private readonly SincronizadorServidor _sincronizador;
     private readonly ZendeskBridgeServer _bridge;
     private readonly ILogger<RecordingCoordinator> _log;
     private readonly object _lock = new();
@@ -42,12 +43,14 @@ public sealed class RecordingCoordinator
         IAudioRecorder recorder,
         ExtensionAudioRecorder extensao,
         ClickWriteUploader uploader,
+        SincronizadorServidor sincronizador,
         ZendeskBridgeServer bridge,
         ILogger<RecordingCoordinator> log)
     {
         _recorder = recorder;
         _extensao = extensao;
         _uploader = uploader;
+        _sincronizador = sincronizador;
         _bridge = bridge;
         _log = log;
 
@@ -117,6 +120,14 @@ public sealed class RecordingCoordinator
                 var resposta = await _uploader.EnviarAsync(captura).ConfigureAwait(false);
                 if (resposta is null)
                     return;  // retida; o próprio uploader já disparou EnvioAdiado
+
+                // A espera vai para disco antes de qualquer notificação de tela: se o app
+                // fechar no instante seguinte, o resultado continua sendo buscado na
+                // próxima abertura. O áudio já saiu daqui — perder o retorno seria pior
+                // que não ter enviado.
+                _sincronizador.Acompanhar(
+                    resposta.CallId, captura.Metadata,
+                    captura.CaminhoAtendente, captura.CaminhoCliente);
 
                 _log.LogInformation("Ligação {CallId} enviada ao servidor — {Origem}",
                                     resposta.CallId, origem);

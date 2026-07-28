@@ -211,6 +211,39 @@ public sealed class ClickWriteUploader : IDisposable
     public int PendentesEmDisco() =>
         Directory.Exists(_pendentes) ? Directory.EnumerateDirectories(_pendentes).Count() : 0;
 
+    /// <summary>
+    /// Estado de uma ligação no servidor. Devolve <c>null</c> quando o servidor não a
+    /// conhece (404) — situação diferente de "ainda processando", e que precisa parar o
+    /// acompanhamento em vez de repetir para sempre.
+    /// </summary>
+    public async Task<EstadoLigacao?> ConsultarAsync(string callId, CancellationToken ct = default)
+    {
+        using var resposta = await _http
+            .GetAsync($"{_cfg.Url.TrimEnd('/')}/v1/calls/{Uri.EscapeDataString(callId)}", ct)
+            .ConfigureAwait(false);
+
+        if (resposta.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return null;
+
+        resposta.EnsureSuccessStatusCode();
+        var corpo = await resposta.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        return JsonSerializer.Deserialize<EstadoLigacao>(corpo, Json);
+    }
+
+    /// <summary>
+    /// Manda o servidor processar de novo, sem reenviar áudio — ele guardou os dois canais.
+    /// É o que mantém o botão "Reprocessar" funcionando depois de um ajuste de vocabulário
+    /// no servidor.
+    /// </summary>
+    public async Task<bool> ReprocessarAsync(string callId, CancellationToken ct = default)
+    {
+        using var resposta = await _http
+            .PostAsync($"{_cfg.Url.TrimEnd('/')}/v1/calls/{Uri.EscapeDataString(callId)}/reprocess",
+                       content: null, ct)
+            .ConfigureAwait(false);
+        return resposta.IsSuccessStatusCode;
+    }
+
     /// <summary>Servidor no ar? Usado pelo indicador de estado na bandeja.</summary>
     public async Task<bool> ServidorNoArAsync(CancellationToken ct = default)
     {
@@ -221,15 +254,6 @@ public sealed class ClickWriteUploader : IDisposable
             return r.IsSuccessStatusCode;
         }
         catch { return false; }
-    }
-
-    /// <summary>Tela de resultado no servidor. O app não desenha nada: só abre o navegador.</summary>
-    public string UrlDoResultado(string callId)
-    {
-        var url = $"{_cfg.Url.TrimEnd('/')}/ui?call={Uri.EscapeDataString(callId)}";
-        return string.IsNullOrWhiteSpace(_cfg.Token)
-            ? url
-            : $"{url}&token={Uri.EscapeDataString(_cfg.Token)}";
     }
 
     public void Dispose()

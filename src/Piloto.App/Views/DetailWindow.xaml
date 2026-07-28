@@ -109,6 +109,19 @@
                                                        Foreground="{StaticResource SucessoClaro}" />
                                         </StackPanel>
                                     </Border>
+                                    <!-- Cor definida em código: verde satisfeito, âmbar com dúvidas,
+                                         vermelho triste. Fica oculto quando o servidor não conseguiu
+                                         classificar — chip vazio não informa nada. -->
+                                    <Border x:Name="ChipSatisfacao" Style="{StaticResource Chip}"
+                                            Background="{StaticResource AcentoFundo}" BorderBrush="Transparent"
+                                            Visibility="Collapsed">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Satisfação" FontSize="11" Foreground="{StaticResource TextoFraco}"
+                                                       Margin="0,0,6,0" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="TxtSatisfacao" FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource AcentoClaro}" />
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
                             </StackPanel>
                         </Border>

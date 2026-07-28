@@ -13,13 +13,14 @@ public partial class DetailWindow : Window
 {
     private readonly CallRecord _registro;
     private readonly IExporter _exporter;
-    private readonly Core.Services.CallEnqueuer _enqueuer;
+    private readonly Core.Services.ClickWriteUploader _uploader;
 
-    public DetailWindow(CallRecord registro, IExporter exporter, Core.Services.CallEnqueuer enqueuer)
+    public DetailWindow(CallRecord registro, IExporter exporter,
+                        Core.Services.ClickWriteUploader uploader)
     {
         _registro = registro;
         _exporter = exporter;
-        _enqueuer = enqueuer;
+        _uploader = uploader;
         InitializeComponent();
         Preencher();
     }
@@ -54,9 +55,38 @@ public partial class DetailWindow : Window
         TxtStatus.Text = Ou(r.Status, "—");
         TxtPedido.Text = Ou(PiiMasker.Mascarar(r.Pedido));
         TxtProximo.Text = Ou(PiiMasker.Mascarar(r.ProximoPasso));
+        PreencherSatisfacao(r.Satisfacao);
 
         PreencherCampos();
         PreencherDialogo();
+    }
+
+    /// <summary>
+    /// Como o cliente saiu da ligação, vindo do servidor. A cor carrega a informação: numa
+    /// lista de ligações do dia, o âmbar e o vermelho são o que o supervisor procura.
+    /// <para>Oculto quando não foi possível classificar — chip vazio ocupa espaço e não
+    /// diz nada, e "não identificado" aqui seria confundido com neutro.</para>
+    /// </summary>
+    private void PreencherSatisfacao(string? satisfacao)
+    {
+        var (texto, fundo, frente) = satisfacao switch
+        {
+            "satisfeito" => ("Satisfeito", "SucessoFundo", "SucessoClaro"),
+            "com_duvidas" => ("Com dúvidas", "AlertaFundo", "AlertaClaro"),
+            "triste" => ("Insatisfeito", "PerigoFundo", "PerigoClaro"),
+            _ => (null, null, null),
+        };
+
+        if (texto is null)
+        {
+            ChipSatisfacao.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        TxtSatisfacao.Text = texto;
+        ChipSatisfacao.Background = (System.Windows.Media.Brush)FindResource(fundo!);
+        TxtSatisfacao.Foreground = (System.Windows.Media.Brush)FindResource(frente!);
+        ChipSatisfacao.Visibility = Visibility.Visible;
     }
 
     private void PreencherDialogo()
@@ -142,38 +172,44 @@ public partial class DetailWindow : Window
     }
 
     /// <summary>
-    /// Reenfileira a ligação a partir dos WAVs originais (retidos por 30 dias): o novo
-    /// resultado SUBSTITUI transcrição, campos e resumo deste registro. Uso típico da fase
-    /// piloto: retestar após atualização do app ou com a máquina folgada (modelo maior).
+    /// Manda o servidor processar esta ligação de novo. O áudio não sobe outra vez — o
+    /// servidor guardou os dois canais, então reprocessar custa uma requisição.
+    /// Uso típico: depois de um ajuste de vocabulário no servidor, refazer a ligação que
+    /// saiu errada e comparar.
     /// </summary>
-    private void Reprocessar_Click(object sender, RoutedEventArgs e)
+    private async void Reprocessar_Click(object sender, RoutedEventArgs e)
     {
-        var temAudio =
-            (!string.IsNullOrWhiteSpace(_registro.CaminhoAudioAtendente) && File.Exists(_registro.CaminhoAudioAtendente)) ||
-            (!string.IsNullOrWhiteSpace(_registro.CaminhoAudioCliente) && File.Exists(_registro.CaminhoAudioCliente));
-        if (!temAudio)
+        if (string.IsNullOrWhiteSpace(_registro.Uuid))
         {
-            MessageBox.Show("O áudio desta ligação não está mais no disco (retenção) — não dá para reprocessar.",
+            MessageBox.Show("Esta ligação não tem identificador do servidor — não dá para reprocessar.",
                 "Click Write", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         var resposta = MessageBox.Show(
-            "Reprocessar esta ligação a partir do áudio?\n\n" +
+            "Reprocessar esta ligação no servidor?\n\n" +
             "A transcrição, os campos e o resumo atuais serão substituídos pelo novo resultado.",
             "Click Write", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (resposta != MessageBoxResult.Yes) return;
 
         try
         {
-            _enqueuer.Reprocessar(_registro);
-            MessageBox.Show("Ligação reenfileirada — será reprocessada em segundo plano.",
-                "Click Write", MessageBoxButton.OK, MessageBoxImage.Information);
-            Close();
+            if (await _uploader.ReprocessarAsync(_registro.Uuid))
+            {
+                MessageBox.Show("Reprocessamento pedido — o resultado chega em segundo plano.",
+                    "Click Write", MessageBoxButton.OK, MessageBoxImage.Information);
+                Close();
+            }
+            else
+            {
+                // 409: o áudio saiu do servidor pela política de retenção.
+                MessageBox.Show("O servidor não tem mais o áudio desta ligação (retenção) — não dá para reprocessar.",
+                    "Click Write", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Falha ao reenfileirar:\n\n" + ex.Message,
+            MessageBox.Show("Falha ao falar com o servidor:\n\n" + ex.Message,
                 "Click Write", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
