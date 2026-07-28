@@ -16,7 +16,7 @@ public sealed class RecordingCoordinator
 {
     private readonly IAudioRecorder _recorder;
     private readonly ExtensionAudioRecorder _extensao;
-    private readonly CallEnqueuer _enqueuer;
+    private readonly ClickWriteUploader _uploader;
     private readonly ZendeskBridgeServer _bridge;
     private readonly ILogger<RecordingCoordinator> _log;
     private readonly object _lock = new();
@@ -31,23 +31,29 @@ public sealed class RecordingCoordinator
     public event EventHandler<bool>? EstadoGravacaoMudou;
     public event EventHandler<string>? AvisoCaptura;
     public event EventHandler? MetadataMudou;
-    public event EventHandler<long>? ChamadaEnfileirada;
+
+    /// <summary>Servidor aceitou a ligação. O argumento traz o call_id.</summary>
+    public event EventHandler<RespostaEnvio>? ChamadaEnviada;
+
+    /// <summary>Servidor inacessível: a gravação ficou retida em disco e sobe depois.</summary>
+    public event EventHandler<string>? EnvioAdiado;
 
     public RecordingCoordinator(
         IAudioRecorder recorder,
         ExtensionAudioRecorder extensao,
-        CallEnqueuer enqueuer,
+        ClickWriteUploader uploader,
         ZendeskBridgeServer bridge,
         ILogger<RecordingCoordinator> log)
     {
         _recorder = recorder;
         _extensao = extensao;
-        _enqueuer = enqueuer;
+        _uploader = uploader;
         _bridge = bridge;
         _log = log;
 
         _recorder.EstadoGravacaoMudou += (_, gravando) => EstadoGravacaoMudou?.Invoke(this, gravando);
         _recorder.AvisoCaptura += (_, msg) => AvisoCaptura?.Invoke(this, msg);
+        _uploader.EnvioAdiado += (_, pasta) => EnvioAdiado?.Invoke(this, pasta);
         _bridge.MetadataAtualizada += (_, meta) => AtualizarMetadata(meta);
         _bridge.ChamadaIniciada += (_, meta) => AtualizarMetadata(meta);
         _bridge.ChamadaEncerrada += (_, meta) => AtualizarMetadata(meta);
@@ -89,10 +95,39 @@ public sealed class RecordingCoordinator
         if (captura is null) return;
 
         CompletarMetadata(captura.Metadata);
-        var id = _enqueuer.Enfileirar(captura);
-        _log.LogInformation("Chamada enfileirada (item {Id}) — áudio capturado pela extensão", id);
-        ChamadaEnfileirada?.Invoke(this, id);
+        Enviar(captura, "captura automática pela extensão");
         LimparMetadata();
+    }
+
+    /// <summary>
+    /// Sobe a captura para o servidor sem bloquear quem chamou.
+    /// <para>
+    /// Deliberadamente sem <c>await</c>: o atendente já está atendendo a próxima ligação
+    /// e não pode ficar preso num upload de dezenas de megabytes. Falha de rede não se
+    /// perde — o <see cref="ClickWriteUploader"/> retém a gravação em disco e reenvia
+    /// sozinho depois.
+    /// </para>
+    /// </summary>
+    private void Enviar(AudioCapture captura, string origem)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var resposta = await _uploader.EnviarAsync(captura).ConfigureAwait(false);
+                if (resposta is null)
+                    return;  // retida; o próprio uploader já disparou EnvioAdiado
+
+                _log.LogInformation("Ligação {CallId} enviada ao servidor — {Origem}",
+                                    resposta.CallId, origem);
+                ChamadaEnviada?.Invoke(this, resposta);
+            }
+            catch (Exception e)
+            {
+                _log.LogError(e, "Falha ao enviar a ligação ao servidor");
+                AvisoCaptura?.Invoke(this, $"Falha ao enviar ao servidor: {e.Message}");
+            }
+        });
     }
 
     private void AtualizarMetadata(CallMetadata meta)
@@ -125,15 +160,13 @@ public sealed class RecordingCoordinator
         _recorder.Iniciar(snapshot);
     }
 
-    /// <summary>Para a gravação e enfileira. Retorna o id do item na fila.</summary>
-    public long PararEEnfileirar()
+    /// <summary>Para a gravação e envia ao servidor. O resultado chega por evento.</summary>
+    public void PararEEnviar()
     {
         var captura = _recorder.Parar();
         CompletarMetadata(captura.Metadata);
-        var id = _enqueuer.Enfileirar(captura);
-        _log.LogInformation("Chamada enfileirada (item {Id})", id);
+        Enviar(captura, "gravação manual");
         LimparMetadata();
-        return id;
     }
 
     public void Descartar()

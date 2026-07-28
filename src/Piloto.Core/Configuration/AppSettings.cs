@@ -9,6 +9,7 @@ namespace Piloto.Core.Configuration;
 /// </summary>
 public sealed class AppSettings
 {
+    public ServidorSettings Servidor { get; set; } = new();
     public BridgeSettings Bridge { get; set; } = new();
     public AudioSettings Audio { get; set; } = new();
     public WhisperSettings Whisper { get; set; } = new();
@@ -67,6 +68,37 @@ public sealed class AppSettings
         });
         File.WriteAllText(caminho, json);
     }
+}
+
+/// <summary>Servidor de transcrição. É para lá que a gravação vai; nada é processado aqui.</summary>
+public sealed class ServidorSettings
+{
+    /// <summary>
+    /// Endereço do servidor. <b>Atenção à porta:</b> a bridge da extensão também usa 8517
+    /// nesta máquina. Se o servidor rodar no mesmo computador que o aplicativo — só faz
+    /// sentido em desenvolvimento — uma das duas portas tem de mudar, senão a bridge não
+    /// sobe e a extensão para de mandar ticket e telefone.
+    /// </summary>
+    public string Url { get; set; } = "http://servidor:8517";
+
+    /// <summary>Token do agente. Vazio só funciona se o servidor também estiver sem token.</summary>
+    public string Token { get; set; } = "";
+
+    /// <summary>Upload de dezenas de MB por rede interna: generoso de propósito.</summary>
+    public int TimeoutSegundos { get; set; } = 300;
+
+    /// <summary>De quanto em quanto tempo tenta subir o que ficou retido em disco.</summary>
+    public int IntervaloReenvioSegundos { get; set; } = 60;
+
+    /// <summary>
+    /// Depois disso a gravação para de ser reenviada — mas NÃO é apagada. Fica em
+    /// %LOCALAPPDATA%\Piloto\pendentes para alguém olhar. Apagar automaticamente
+    /// transformaria um problema de rede em ligação perdida sem rastro.
+    /// </summary>
+    public int MaxTentativas { get; set; } = 10;
+
+    /// <summary>Abre a tela do servidor no navegador quando a ligação é aceita.</summary>
+    public bool AbrirResultadoNoNavegador { get; set; } = true;
 }
 
 public sealed class BridgeSettings

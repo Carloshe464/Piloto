@@ -52,6 +52,12 @@ public static class CompositionRoot
         services.AddSingleton<TranscriptionPipeline>();
         services.AddSingleton<QueueProcessor>();
         services.AddSingleton<CallEnqueuer>();
+
+        // A partir daqui a inferência acontece no servidor. O CallEnqueuer e o
+        // QueueProcessor continuam registrados apenas porque as telas de histórico
+        // ainda os referenciam; sem nada sendo enfileirado, a fila fica ociosa.
+        // Eles saem junto com a reescrita dessas telas.
+        services.AddSingleton<ClickWriteUploader>();
         services.AddSingleton(sp => new ZendeskBridgeServer(
             settings.Bridge.Porta, sp.GetRequiredService<ILogger<ZendeskBridgeServer>>()));
 

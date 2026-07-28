@@ -67,13 +67,13 @@ public partial class MainWindow : Window
         {
             if (_coordinator.EstaGravando)
             {
-                var id = _coordinator.PararEEnfileirar();
-                TxtStatus.Text = $"Chamada enfileirada (#{id}). Será transcrita em segundo plano.";
+                _coordinator.PararEEnviar();
+                TxtStatus.Text = "Enviando ao servidor de transcrição…";
             }
             else
             {
                 _coordinator.Iniciar();
-                TxtStatus.Text = "Gravando… clique em Parar para transcrever.";
+                TxtStatus.Text = "Gravando… clique em Parar para enviar ao servidor.";
             }
         }
         catch (Exception ex)

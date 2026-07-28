@@ -2,7 +2,9 @@
 ; Gera installer\Output\ClickWriteSetup-<versao>.exe. Rode via scripts\build-installer.ps1 ou no CI.
 
 #define MyAppName "Click Write"
-#define MyAppVersion "1.0.0"
+; 1.1 — a transcrição passou para o servidor. O aplicativo grava, envia e abre o
+; resultado no navegador. Saem daqui os modelos (~2,6 GB) e todo o processamento local.
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Click Write"
 #define MyAppExeName "ClickWrite.exe"
 ; Nome anterior do produto (até a 0.7.x). A 1.0 instala por cima dela e precisa saber
@@ -60,17 +62,12 @@ Name: "startupicon"; Description: "Iniciar o {#MyAppName} com o Windows"; GroupD
 Source: "..\publish\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Extensão do navegador (para carregar sem compactação ou distribuir por GPO)
 Source: "..\extension\*"; DestDir: "{app}\extension"; Flags: recursesubdirs createallsubdirs ignoreversion
-; Script de download dos modelos (para rodar direto na máquina de teste)
-Source: "..\scripts\download-models.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
-; Monitor de logs ao vivo (fase piloto: acompanhar o app em tempo real na máquina de teste)
+; Monitor de logs ao vivo (fase piloto: acompanhar o app em tempo real na máquina do atendente)
 Source: "..\scripts\monitor-logs.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+; download-models.ps1 NÃO é mais distribuído: não há modelo local para baixar.
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\Baixar modelos (Whisper + Gemma)"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
-  Parameters: "-NoExit -ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\download-models.ps1"""; \
-  WorkingDir: "{app}\scripts"; \
-  Comment: "Baixa os modelos para %LOCALAPPDATA%\Piloto\models"
 Name: "{group}\{#MyAppName} — Logs ao vivo"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
   Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\monitor-logs.ps1"""; \
   WorkingDir: "{app}\scripts"; \
@@ -88,16 +85,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
   ValueName: "{#NomeAntigo}"; ValueType: none; Flags: deletevalue
 
 [Run]
-; Entradas postinstall viram checkboxes na última tela do assistente e rodam como o
-; usuário original (não elevado) — os modelos caem no %LOCALAPPDATA% do usuário certo.
-; Os modelos (~2,6 GB) não são embutidos no setup: o GitHub Releases limita artefatos
-; a 2 GB e cada atualização reenviaria tudo; em máquinas sem internet, use o atalho
-; "Baixar modelos" do menu Iniciar em outra máquina e copie a pasta manualmente.
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
-  Parameters: "-NoExit -ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\download-models.ps1"""; \
-  WorkingDir: "{app}\scripts"; \
-  Description: "Baixar os modelos de IA agora (~2,6 GB — requer internet)"; \
-  Flags: nowait postinstall skipifsilent
+; A etapa de download de modelos saiu na 1.1: não há inferência nesta máquina.
+; O aplicativo grava, envia ao servidor e abre o resultado no navegador.
 Filename: "{app}\{#MyAppExeName}"; Description: "Executar o {#MyAppName} agora"; \
   Flags: nowait postinstall skipifsilent
 
@@ -141,8 +130,8 @@ begin
 end;
 
 { Remove o que a versão 0.7.x deixou para trás. Roda DEPOIS da instalação: se algo aqui
-  falhar, a 1.0 já está no disco e funcionando — a sobra é cosmética, nunca um app
-  quebrado. Os dados do usuário em %LOCALAPPDATA%\Piloto não entram nesta limpeza. }
+  falhar, a nova versão já está no disco e funcionando — a sobra é cosmética, nunca um
+  app quebrado. O banco e o histórico do usuário não entram nesta limpeza. }
 procedure LimparInstalacaoAntiga();
 var
   PastaAntiga, GrupoAntigo, AtalhoAntigo: String;
@@ -161,8 +150,46 @@ begin
     DeleteFile(AtalhoAntigo);
 end;
 
+{ Remove o que a inferência local deixou na pasta do programa. Uma atualização in-place
+  não apaga arquivos que a nova versão não instala: sem esta limpeza, o executável do
+  worker e as bibliotecas nativas do llama.cpp e do Whisper ficariam para sempre no
+  disco. São justamente as DLLs que o antivírus bloqueava — não têm mais razão de existir
+  aqui, e deixá-las só dá margem a alarme falso. }
+procedure LimparInferenciaLocal();
+var
+  App, Modelos: String;
+begin
+  App := ExpandConstant('{app}');
+
+  { Executor de inferência em processo próprio (0.7.11 em diante). }
+  DelTree(App + '\Piloto.LlmWorker.exe', False, True, False);
+  DelTree(App + '\Piloto.LlmWorker.*', False, True, False);
+
+  { Bibliotecas nativas do llama.cpp e do Whisper, e os backends por instrução de CPU. }
+  DelTree(App + '\llama*.dll', False, True, False);
+  DelTree(App + '\ggml*.dll', False, True, False);
+  DelTree(App + '\whisper*.dll', False, True, False);
+  DelTree(App + '\LLamaSharp*.dll', False, True, False);
+  DelTree(App + '\Whisper.net*.dll', False, True, False);
+  DelTree(App + '\runtimes\*', False, True, True);
+
+  { Script de download de modelos: não há mais o que baixar. }
+  DelTree(App + '\scripts\download-models.ps1', False, True, False);
+
+  { Modelos (~2,6 GB). Só funciona quando quem instala é o próprio usuário do
+    computador: com PrivilegesRequired=admin, {localappdata} pode apontar para o
+    perfil do administrador, e não para o do atendente. Por isso o aplicativo
+    repete esta limpeza na primeira abertura, aí sim rodando como o usuário certo. }
+  Modelos := ExpandConstant('{localappdata}\{#NomeAntigo}\models');
+  if DirExists(Modelos) then
+    DelTree(Modelos, True, True, True);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
+  begin
     LimparInstalacaoAntiga();
+    LimparInferenciaLocal();
+  end;
 end;

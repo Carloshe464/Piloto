@@ -6,6 +6,7 @@ using Piloto.App.Services;
 using Piloto.Bridge;
 using Piloto.Core.Abstractions;
 using Piloto.Core.Pipeline;
+using Piloto.Core.Services;
 
 namespace Piloto.App;
 
@@ -63,6 +64,18 @@ public partial class App : Application
             var queue = _provider.GetRequiredService<QueueProcessor>();
             var bridge = _provider.GetRequiredService<ZendeskBridgeServer>();
 
+            LimparModelosLocais();
+
+            // Máquina desligada com ligação retida, ou servidor que passou a noite fora:
+            // sobe o que ficou para trás assim que o app abre, sem esperar o timer.
+            var uploader = _provider.GetRequiredService<ClickWriteUploader>();
+            var retidas = uploader.PendentesEmDisco();
+            if (retidas > 0)
+            {
+                _log.LogInformation("{Retidas} ligação(ões) retida(s) em disco — reenviando", retidas);
+                _ = Task.Run(() => uploader.DrenarPendentesAsync());
+            }
+
             _main = _provider.GetRequiredService<MainWindow>();
 
             _tray = new TrayIconController(
@@ -78,8 +91,26 @@ public partial class App : Application
             coordinator.AvisoCaptura += (_, msg) =>
                 Dispatcher.Invoke(() => _tray!.Notificar("Click Write — captura de áudio", msg));
 
-            coordinator.ChamadaEnfileirada += (_, id) => Dispatcher.Invoke(() =>
-                _main!.MostrarStatus($"Chamada #{id} enfileirada — captura automática pela extensão."));
+            coordinator.ChamadaEnviada += (_, resposta) => Dispatcher.Invoke(() =>
+            {
+                var fila = resposta.Posicao is > 0 ? $" (posição {resposta.Posicao} na fila)" : "";
+                _main!.MostrarStatus($"Ligação enviada ao servidor{fila}.");
+                _tray?.Notificar("Click Write", $"Ligação enviada{fila}.");
+
+                // O aplicativo não desenha tela de resultado: quem exibe é o servidor.
+                if (_config.Settings.Servidor.AbrirResultadoNoNavegador)
+                    AbrirNoNavegador(
+                        _provider!.GetRequiredService<ClickWriteUploader>()
+                                  .UrlDoResultado(resposta.CallId));
+            });
+
+            coordinator.EnvioAdiado += (_, pasta) => Dispatcher.Invoke(() =>
+            {
+                // Rede caiu ou servidor fora: a gravação NÃO se perde, fica em disco.
+                _main!.MostrarStatus("Servidor inacessível — gravação guardada; será enviada sozinha.");
+                _tray?.Notificar("Click Write — servidor inacessível",
+                                 $"A ligação ficou guardada em {pasta} e sobe automaticamente.");
+            });
 
             queue.ItemIniciado += (_, id) => Dispatcher.Invoke(() =>
                 _main!.MostrarStatus($"Processando ligação #{id} em segundo plano — transcrição e resumo a caminho…"));
@@ -131,6 +162,54 @@ public partial class App : Application
         catch
         {
             return "(não foi possível gravar o arquivo de log)";
+        }
+    }
+
+    /// <summary>
+    /// Apaga os modelos de IA que a versão anterior baixou (~2,6 GB).
+    /// <para>
+    /// O instalador também tenta, mas roda elevado: <c>{localappdata}</c> pode apontar
+    /// para o perfil do administrador em vez do perfil do atendente, e nesse caso os
+    /// 2,6 GB continuariam ocupando o disco de quem usa a máquina. Aqui a limpeza roda
+    /// como o usuário certo, na primeira abertura depois da atualização.
+    /// </para>
+    /// </summary>
+    private void LimparModelosLocais()
+    {
+        try
+        {
+            var modelos = _config!.Settings.PastaModelos;
+            if (!Directory.Exists(modelos))
+                return;
+
+            var bytes = new DirectoryInfo(modelos)
+                .EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
+            Directory.Delete(modelos, recursive: true);
+            _log?.LogInformation(
+                "Modelos locais removidos ({Mb} MB liberados) — a inferência agora é no servidor",
+                bytes / 1024 / 1024);
+        }
+        catch (Exception e)
+        {
+            // Espaço em disco não vale derrubar a abertura do app.
+            _log?.LogWarning(e, "Não foi possível remover os modelos locais");
+        }
+    }
+
+    /// <summary>
+    /// Abre a tela do servidor. Falha aqui é cosmética: a ligação já foi aceita e o
+    /// registro existe — não vale derrubar o app porque o navegador não abriu.
+    /// </summary>
+    private void AbrirNoNavegador(string url)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception e)
+        {
+            _log?.LogWarning(e, "Não foi possível abrir {Url}", url);
         }
     }
 
