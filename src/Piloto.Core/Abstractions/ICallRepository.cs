@@ -22,14 +22,6 @@ public interface ICallRepository
     /// </summary>
     int RecuperarItensOrfaos(int maxTentativas);
 
-    /// <summary>
-    /// Itens em Erro que nunca geraram registro — tipicamente vítimas de queda repetida
-    /// do processo (crash nativo não passa pelo catch do processador). São materializados
-    /// como registro marcado para revisão na subida da fila: a ligação aparece na UI em
-    /// vez de sumir em silêncio.
-    /// </summary>
-    IReadOnlyList<QueueItem> ItensErroSemRegistro();
-
     // ----- Registros -----
     long SalvarRegistro(CallRecord registro);
     CallRecord? ObterRegistro(long id);
@@ -42,11 +34,8 @@ public interface ICallRepository
     /// </summary>
     void AtualizarRegistro(CallRecord registro);
 
-    /// <summary>
-    /// Registros com transcrição não vazia cujo resumo falhou (motivo de revisão contém
-    /// o marcador de erro do LLM) — candidatos da varredura de resumos pendentes.
-    /// </summary>
-    IReadOnlyList<CallRecord> RegistrosComResumoPendente(int limite);
+    // A varredura de resumos pendentes saiu na 1.1: quem retenta o resumo é o servidor,
+    // que já reprocessa por conta própria e expõe /reprocess.
 
     /// <summary>Busca full-text (FTS5) na transcrição e no resumo.</summary>
     IReadOnlyList<CallRecord> Buscar(string termo, int limite = 200);

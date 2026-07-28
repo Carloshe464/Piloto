@@ -10,12 +10,12 @@ namespace Piloto.App.Views;
 public partial class SettingsWindow : Window
 {
     private readonly ConfigService _config;
-    private readonly IModelCatalog _modelos;
+    private readonly Core.Services.ClickWriteUploader _uploader;
 
-    public SettingsWindow(ConfigService config, IModelCatalog modelos)
+    public SettingsWindow(ConfigService config, Core.Services.ClickWriteUploader uploader)
     {
         _config = config;
-        _modelos = modelos;
+        _uploader = uploader;
         InitializeComponent();
         Carregar();
     }
@@ -45,19 +45,34 @@ public partial class SettingsWindow : Window
         AtualizarStatusModelos();
     }
 
-    private void AtualizarStatusModelos()
+    /// <summary>
+    /// O painel que mostrava se os modelos locais estavam presentes agora mostra se o
+    /// servidor está respondendo. É a mesma pergunta de sempre — "dá para processar?" —
+    /// e a resposta mudou de lugar junto com a inferência.
+    /// </summary>
+    private async void AtualizarStatusModelos()
     {
-        var whisper = _modelos.WhisperDisponivel ? "presente" : "AUSENTE";
-        var llm = _modelos.LlmDisponivel ? "presente" : "AUSENTE";
+        var s = _config.Settings.Servidor;
+        var comToken = string.IsNullOrWhiteSpace(s.Token) ? "sem token" : "token configurado";
+        TxtStatusModelos.Text = $"Servidor: {s.Url}\n{comToken}\nverificando…";
+
+        var noAr = await _uploader.ServidorNoArAsync();
+        var retidas = _uploader.PendentesEmDisco();
+
         TxtStatusModelos.Text =
-            $"Pasta de modelos: {_config.Settings.PastaModelos}\n" +
-            $"Whisper: {whisper}   •   LLM: {llm}\n" +
-            (_modelos.PipelinePronto ? "Pipeline pronto." : "Pipeline pausado — baixe/aponte os modelos.");
+            $"Servidor: {s.Url}\n" +
+            $"{comToken}   •   {(noAr ? "respondendo" : "INACESSÍVEL")}\n" +
+            (retidas > 0
+                ? $"{retidas} ligação(ões) guardada(s) nesta máquina, aguardando envio."
+                : "Nada pendente de envio.");
     }
 
     private void AbrirPastaModelos_Click(object sender, RoutedEventArgs e)
     {
-        var pasta = _config.Settings.PastaModelos;
+        // O botão passou a abrir a pasta de dados: é onde ficam as ligações retidas
+        // (pendentes) e as que aguardam resultado — o que alguém precisa inspecionar
+        // quando algo não chega ao servidor. Modelos não existem mais nesta máquina.
+        var pasta = _config.Settings.PastaDadosExpandida;
         try
         {
             Directory.CreateDirectory(pasta);

@@ -1,26 +1,18 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.Core", "src\Piloto.Core\Piloto.Core.csproj", "{A1000001-0000-0000-0000-000000000001}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.Rules", "src\Piloto.Rules\Piloto.Rules.csproj", "{A1000001-0000-0000-0000-000000000002}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.Data", "src\Piloto.Data\Piloto.Data.csproj", "{A1000001-0000-0000-0000-000000000003}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.Audio", "src\Piloto.Audio\Piloto.Audio.csproj", "{A1000001-0000-0000-0000-000000000004}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.Transcription", "src\Piloto.Transcription\Piloto.Transcription.csproj", "{A1000001-0000-0000-0000-000000000005}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.Llm", "src\Piloto.Llm\Piloto.Llm.csproj", "{A1000001-0000-0000-0000-000000000006}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.Bridge", "src\Piloto.Bridge\Piloto.Bridge.csproj", "{A1000001-0000-0000-0000-000000000007}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.App", "src\Piloto.App\Piloto.App.csproj", "{A1000001-0000-0000-0000-000000000008}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.Tests", "tests\Piloto.Tests\Piloto.Tests.csproj", "{A1000001-0000-0000-0000-000000000009}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Piloto.LlmWorker", "src\Piloto.LlmWorker\Piloto.LlmWorker.csproj", "{A1000001-0000-0000-0000-00000000000A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,10 +24,6 @@ Global
 		{A1000001-0000-0000-0000-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1000001-0000-0000-0000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1000001-0000-0000-0000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A1000001-0000-0000-0000-000000000002}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A1000001-0000-0000-0000-000000000002}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A1000001-0000-0000-0000-000000000002}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A1000001-0000-0000-0000-000000000002}.Release|Any CPU.Build.0 = Release|Any CPU
 		{A1000001-0000-0000-0000-000000000003}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A1000001-0000-0000-0000-000000000003}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1000001-0000-0000-0000-000000000003}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -44,14 +32,6 @@ Global
 		{A1000001-0000-0000-0000-000000000004}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1000001-0000-0000-0000-000000000004}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1000001-0000-0000-0000-000000000004}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A1000001-0000-0000-0000-000000000005}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A1000001-0000-0000-0000-000000000005}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A1000001-0000-0000-0000-000000000005}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A1000001-0000-0000-0000-000000000005}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A1000001-0000-0000-0000-000000000006}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A1000001-0000-0000-0000-000000000006}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A1000001-0000-0000-0000-000000000006}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A1000001-0000-0000-0000-000000000006}.Release|Any CPU.Build.0 = Release|Any CPU
 		{A1000001-0000-0000-0000-000000000007}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A1000001-0000-0000-0000-000000000007}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1000001-0000-0000-0000-000000000007}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -64,10 +44,6 @@ Global
 		{A1000001-0000-0000-0000-000000000009}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1000001-0000-0000-0000-000000000009}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1000001-0000-0000-0000-000000000009}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A1000001-0000-0000-0000-00000000000A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A1000001-0000-0000-0000-00000000000A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A1000001-0000-0000-0000-00000000000A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A1000001-0000-0000-0000-00000000000A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

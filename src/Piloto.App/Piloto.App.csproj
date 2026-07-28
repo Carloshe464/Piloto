@@ -23,13 +23,14 @@
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.10" />
   </ItemGroup>
 
+  <!-- Piloto.Transcription, Piloto.Llm, Piloto.LlmWorker e Piloto.Rules saíram na 1.1:
+       a inferência acontece no servidor. Com elas foram embora o Whisper.net e o
+       LLamaSharp — as bibliotecas nativas que o antivírus bloqueava e que consumiram
+       as versões 0.7.11 a 0.7.15. -->
   <ItemGroup>
     <ProjectReference Include="..\Piloto.Core\Piloto.Core.csproj" />
-    <ProjectReference Include="..\Piloto.Rules\Piloto.Rules.csproj" />
     <ProjectReference Include="..\Piloto.Data\Piloto.Data.csproj" />
     <ProjectReference Include="..\Piloto.Audio\Piloto.Audio.csproj" />
-    <ProjectReference Include="..\Piloto.Transcription\Piloto.Transcription.csproj" />
-    <ProjectReference Include="..\Piloto.Llm\Piloto.Llm.csproj" />
     <ProjectReference Include="..\Piloto.Bridge\Piloto.Bridge.csproj" />
   </ItemGroup>
 
@@ -46,19 +47,9 @@
     </Content>
   </ItemGroup>
 
-  <!-- O publish com RID achata os assets nativos do NuGet na raiz, o que colide as variantes
-       avx/avx2/avx512/noavx do LLamaSharp.Backend.Cpu (NETSDK1152) e remove as subpastas
-       runtimes\win-x64\native\<variante>\ que o loader do LLamaSharp procura em runtime.
-       Este target devolve cada DLL do backend ao seu caminho original dentro do publish. -->
-  <Target Name="PreservarNativosLLamaSharpNoPublish" AfterTargets="ComputeResolvedFilesToPublishList">
-    <ItemGroup>
-      <_LLamaNativoAchatado Include="@(ResolvedFileToPublish)"
-          Condition="'%(ResolvedFileToPublish.NuGetPackageId)' == 'LLamaSharp.Backend.Cpu'" />
-      <ResolvedFileToPublish Remove="@(_LLamaNativoAchatado)" />
-      <ResolvedFileToPublish Include="@(_LLamaNativoAchatado)">
-        <RelativePath>$([System.Text.RegularExpressions.Regex]::Replace('%(_LLamaNativoAchatado.Identity)', '^.*[\\/]runtimes[\\/]', 'runtimes/'))</RelativePath>
-      </ResolvedFileToPublish>
-    </ItemGroup>
-  </Target>
+  <!-- O target PreservarNativosLLamaSharpNoPublish saiu junto com o LLamaSharp. Ele
+       existia para devolver as variantes avx/avx2/avx512/noavx do backend ao caminho
+       que o loader procurava em runtime, depois de o publish com RID achatá-las na
+       raiz. Sem inferência local não há backend nativo a preservar. -->
 
 </Project>

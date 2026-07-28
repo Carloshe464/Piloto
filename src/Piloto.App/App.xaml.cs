@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using Piloto.App.Services;
 using Piloto.Bridge;
 using Piloto.Core.Abstractions;
-using Piloto.Core.Pipeline;
 using Piloto.Core.Services;
 
 namespace Piloto.App;
@@ -61,7 +60,6 @@ public partial class App : Application
             repo.Inicializar();
 
             var coordinator = _provider.GetRequiredService<RecordingCoordinator>();
-            var queue = _provider.GetRequiredService<QueueProcessor>();
             var bridge = _provider.GetRequiredService<ZendeskBridgeServer>();
 
             LimparModelosLocais();
@@ -138,7 +136,8 @@ public partial class App : Application
             try { bridge.Iniciar(); }
             catch (Exception ex) { _log.LogError(ex, "Falha ao iniciar o bridge na porta {Porta}", _config.Settings.Bridge.Porta); }
 
-            queue.Iniciar();
+            // A fila local de transcrição não existe mais: quem processa é o servidor, e
+            // o SincronizadorServidor já subiu com o próprio relógio.
 
             _ = Task.Run(() => AplicarRetencao(repo));
 

@@ -18,9 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Piloto.Core\Piloto.Core.csproj" />
-    <ProjectReference Include="..\..\src\Piloto.Rules\Piloto.Rules.csproj" />
     <ProjectReference Include="..\..\src\Piloto.Data\Piloto.Data.csproj" />
-    <ProjectReference Include="..\..\src\Piloto.Llm\Piloto.Llm.csproj" />
   </ItemGroup>
 
 </Project>

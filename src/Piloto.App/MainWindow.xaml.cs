@@ -16,8 +16,12 @@ public partial class MainWindow : Window
 {
     private readonly ICallRepository _repo;
     private readonly IExporter _exporter;
-    private readonly IModelCatalog _modelos;
+    private readonly Core.Services.SincronizadorServidor _sincronizador;
     private readonly RecordingCoordinator _coordinator;
+
+    /// <summary>Última leitura do estado do servidor. A checagem é assíncrona; o banner
+    /// lê este campo para não bloquear a interface a cada tique do relógio.</summary>
+    private bool _servidorNoAr = true;
     private readonly Core.Services.ClickWriteUploader _uploader;
     private readonly ConfigService _config;
     private readonly ILogger<MainWindow> _log;
@@ -28,7 +32,7 @@ public partial class MainWindow : Window
     public MainWindow(
         ICallRepository repo,
         IExporter exporter,
-        IModelCatalog modelos,
+        Core.Services.SincronizadorServidor sincronizador,
         RecordingCoordinator coordinator,
         Core.Services.ClickWriteUploader uploader,
         ConfigService config,
@@ -36,7 +40,7 @@ public partial class MainWindow : Window
     {
         _repo = repo;
         _exporter = exporter;
-        _modelos = modelos;
+        _sincronizador = sincronizador;
         _coordinator = coordinator;
         _uploader = uploader;
         _config = config;
@@ -48,7 +52,11 @@ public partial class MainWindow : Window
         _coordinator.EstadoGravacaoMudou += (_, gravando) => Dispatcher.Invoke(() => AtualizarBotoes(gravando));
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _timer.Tick += (_, _) => AtualizarContadores();
+        _timer.Tick += (_, _) =>
+        {
+            AtualizarContadores();
+            AtualizarBanner();
+        };
         _timer.Start();
 
         Loaded += (_, _) =>
@@ -94,7 +102,7 @@ public partial class MainWindow : Window
 
     public void AbrirConfiguracoes()
     {
-        var win = new SettingsWindow(_config, _modelos) { Owner = this };
+        var win = new SettingsWindow(_config, _uploader) { Owner = this };
         win.ShowDialog();
         AtualizarBanner();
     }
@@ -146,17 +154,37 @@ public partial class MainWindow : Window
         BtnNaoGravar.IsEnabled = gravando;
     }
 
+    /// <summary>
+    /// O banner que avisava sobre modelos ausentes agora avisa sobre o servidor. É a
+    /// mesma pergunta que ele sempre respondeu — "dá para processar agora?" — só que a
+    /// resposta mudou de lugar junto com a inferência.
+    /// <para>Gravar continua funcionando com o servidor fora do ar: a ligação fica
+    /// retida em disco e sobe sozinha. O banner informa, não impede.</para>
+    /// </summary>
     private void AtualizarBanner()
     {
-        if (_modelos.PipelinePronto)
-        {
+        var retidas = _uploader.PendentesEmDisco();
+
+        if (_servidorNoAr && retidas == 0)
             BannerModelos.Visibility = Visibility.Collapsed;
-            return;
+        else
+        {
+            TxtBanner.Text = _servidorNoAr
+                ? $"{retidas} ligação(ões) aguardando envio ao servidor — subindo automaticamente."
+                : "Servidor de transcrição inacessível. Pode gravar normalmente: as ligações "
+                  + $"ficam guardadas nesta máquina ({retidas} no momento) e sobem sozinhas.";
+            BannerModelos.Visibility = Visibility.Visible;
         }
-        var ausentes = string.Join(", ", _modelos.ModelosAusentes());
-        TxtBanner.Text = $"Modelos ausentes ({ausentes}). A fila fica pausada até baixá-los "
-                         + "(scripts/download-models.ps1) ou apontar a pasta de modelos.";
-        BannerModelos.Visibility = Visibility.Visible;
+
+        VerificarServidor();
+    }
+
+    /// <summary>Consulta o servidor sem travar a interface; o banner usa o resultado no
+    /// tique seguinte.</summary>
+    private async void VerificarServidor()
+    {
+        try { _servidorNoAr = await _uploader.ServidorNoArAsync(); }
+        catch { _servidorNoAr = false; }
     }
 
     private void AtualizarContadores()
@@ -164,7 +192,10 @@ public partial class MainWindow : Window
         try
         {
             var c = _repo.Contadores();
-            var fila = _repo.ContarPendentes();
+            // "Fila" deixou de ser a fila local de transcrição: agora é o que ainda não
+            // completou o caminho até o servidor — o que falta subir mais o que já subiu
+            // e aguarda resultado.
+            var fila = _uploader.PendentesEmDisco() + _sincronizador.AguardandoResultado();
             TxtTotal.Text = $"Chamadas: {c.TotalChamadas}";
             TxtTempo.Text = $"Tempo falado: {c.TempoTotalFalado:hh\\:mm\\:ss}";
             TxtRevisao.Text = $"A revisar: {c.PendentesRevisao}";
