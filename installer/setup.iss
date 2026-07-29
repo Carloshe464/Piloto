@@ -4,9 +4,10 @@
 #define MyAppName "Click Write"
 ; 1.1 — a transcrição passou para o servidor. O aplicativo grava, envia e abre o
 ; resultado no navegador. Saem daqui os modelos (~2,6 GB) e todo o processamento local.
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "Click Write"
 #define MyAppExeName "ClickWrite.exe"
+#define LogMonitorExe "ClickWrite.LogMonitor.exe"
 ; Nome anterior do produto (até a 0.7.x). A 1.0 instala por cima dela e precisa saber
 ; o que remover: pasta, grupo do menu Iniciar, entrada de inicialização e o executável.
 #define NomeAntigo "Piloto"
@@ -48,7 +49,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 ; antigo de propósito: renomeá-la custaria um novo download de 2,6 GB por máquina, e o
 ; caminho não aparece para o atendente. O AppMutex é a rede de segurança caso o app
 ; reabra depois do fechamento automático feito em [Code].
-AppMutex={#MyAppMutex}
+AppMutex={#MyAppMutex},ClickWriteLogMonitorMutex
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
@@ -62,18 +63,20 @@ Name: "startupicon"; Description: "Iniciar o {#MyAppName} com o Windows"; GroupD
 Source: "..\publish\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Extensão do navegador (para carregar sem compactação ou distribuir por GPO)
 Source: "..\extension\*"; DestDir: "{app}\extension"; Flags: recursesubdirs createallsubdirs ignoreversion
-; Monitor de logs ao vivo (fase piloto: acompanhar o app em tempo real na máquina do atendente)
-Source: "..\scripts\monitor-logs.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+; O monitor agora é um executável WPF publicado junto com o aplicativo.
 ; download-models.ps1 NÃO é mais distribuído: não há modelo local para baixar.
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\{#MyAppName} — Logs ao vivo"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
-  Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\monitor-logs.ps1"""; \
-  WorkingDir: "{app}\scripts"; \
-  Comment: "Acompanha em tempo real o que o {#MyAppName} está fazendo (logs do dia)"
+Name: "{group}\{#MyAppName} - Monitor de atividades"; Filename: "{app}\{#LogMonitorExe}"; \
+  WorkingDir: "{app}"; Comment: "Mostra gravações, envios, avisos e erros do {#MyAppName}"
 Name: "{group}\Desinstalar {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[InstallDelete]
+Type: files; Name: "{app}\scripts\monitor-logs.ps1"
+Type: files; Name: "{group}\{#MyAppName} - Logs ao vivo.lnk"
+Type: files; Name: "{group}\{#MyAppName} — Logs ao vivo.lnk"
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; \
@@ -223,7 +226,10 @@ var
 begin
   Result := True;
   if not CheckForMutexes('{#MyAppMutex}') then
-    Exit;
+  begin
+    if not CheckForMutexes('ClickWriteLogMonitorMutex') then
+      Exit;
+  end;
 
   if MsgBox('O {#MyAppName} está em execução e será fechado para continuar.' + #13#10 +
             'Se houver uma gravação em andamento, ela será perdida. Continuar?',
@@ -236,6 +242,8 @@ begin
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#MyAppExeName} /F', '',
        SW_HIDE, ewWaitUntilTerminated, Codigo);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#ExeAntigo} /F', '',
+       SW_HIDE, ewWaitUntilTerminated, Codigo);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#LogMonitorExe} /F', '',
        SW_HIDE, ewWaitUntilTerminated, Codigo);
   Sleep(800);
 end;

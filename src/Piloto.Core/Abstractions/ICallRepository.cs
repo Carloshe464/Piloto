@@ -36,8 +36,9 @@ public interface ICallRepository
 
     /// <summary>
     /// Substitui o conteúdo do registro (transcrição, campos, resumo, revisão) mantendo
-    /// id, uuid e criado_em — reprocessamento e resumo pendente atualizam em lugar, nunca
-    /// duplicam a ligação. Reindexa a busca (FTS).
+    /// id e criado_em. O uuid provisório pode ser substituído pelo call_id do servidor;
+    /// reprocessamento e resultado pendente atualizam em lugar, sem duplicar a ligação.
+    /// Reindexa a busca (FTS).
     /// </summary>
     void AtualizarRegistro(CallRecord registro);
 

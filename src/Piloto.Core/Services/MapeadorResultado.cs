@@ -12,6 +12,27 @@ namespace Piloto.Core.Services;
 /// </summary>
 public static class MapeadorResultado
 {
+    public static CallRecord CriarProvisorio(AudioCapture captura)
+    {
+        var campos = ObjectiveFields.Vazio();
+        AdicionarDoCadastro(campos.Tickets, captura.Metadata.TicketId, FieldType.Ticket);
+        AdicionarDoCadastro(campos.Telefones,
+            captura.Metadata.TelefoneCliente ?? captura.Metadata.Numero,
+            FieldType.Telefone);
+
+        return new CallRecord
+        {
+            Uuid = $"local-{Guid.NewGuid():N}",
+            Metadata = captura.Metadata,
+            Campos = campos,
+            Resumo = new LlmSummary { Status = "Processando" },
+            CriadoEm = captura.IniciadaEm,
+            Duracao = captura.Duracao,
+            CaminhoAudioAtendente = captura.CaminhoAtendente,
+            CaminhoAudioCliente = captura.CaminhoCliente,
+        };
+    }
+
     public static CallRecord ParaRegistro(
         ResultadoServidor origem,
         CallMetadata metadataLocal,
@@ -58,12 +79,15 @@ public static class MapeadorResultado
         var nomeOuvido = origem.Campos.Nome?.ParaExibicao;
         return new CallMetadata
         {
-            Numero = local.Numero ?? origem.Metadados.Telefone,
-            TicketId = local.TicketId ?? origem.Metadados.Ticket,
+            Numero = origem.Metadados.Telefone ?? local.Numero,
+            TicketId = origem.Metadados.Ticket ?? local.TicketId,
             Status = local.Status,
             Atendente = local.Atendente ?? origem.Metadados.AgentId,
             EmailCliente = local.EmailCliente ?? origem.Campos.Email?.ParaExibicao,
-            TelefoneCliente = local.TelefoneCliente ?? origem.Campos.Telefone?.ParaExibicao,
+            TelefoneCliente = origem.Campos.Telefone?.ParaExibicao
+                              ?? local.TelefoneCliente
+                              ?? local.Numero
+                              ?? origem.Metadados.Telefone,
             NomeCliente = local.NomeCliente ?? nomeOuvido,
             IniciadaEm = local.IniciadaEm,
         };
@@ -92,18 +116,21 @@ public static class MapeadorResultado
         Adicionar(campos.Cpfs, origem.Cnpj, FieldType.Cnpj);
         Adicionar(campos.Emails, origem.Email, FieldType.Email);
         Adicionar(campos.Nomes, origem.Nome, FieldType.Nome);
-        Adicionar(campos.Telefones, origem.Telefone, FieldType.Telefone);
+        if (origem.Telefone is not null)
+            Adicionar(campos.Telefones, origem.Telefone, FieldType.Telefone);
 
         // O número do discador e o telefone do cadastro nunca chegam como campo do
         // servidor: ele só devolve o que ouviu. Sem isto, uma ligação em que ninguém
         // disse o telefone em voz alta sai com "Telefones: Não identificado" mesmo com
         // o número na tela do Zendesk.
-        AdicionarDoCadastro(campos.Telefones, local.Numero ?? resultado.Metadados.Telefone, FieldType.Telefone);
-        AdicionarDoCadastro(campos.Telefones, local.TelefoneCliente, FieldType.Telefone);
+        if (origem.Telefone is null)
+            AdicionarDoCadastro(campos.Telefones,
+                local.TelefoneCliente ?? local.Numero ?? resultado.Metadados.Telefone,
+                FieldType.Telefone);
 
         // Ticket e nome do cadastro vêm da extensão, não da ligação: é o dado que o
         // atendente confere no Zendesk e o que amarra a gravação ao atendimento.
-        AdicionarDoCadastro(campos.Tickets, local.TicketId ?? resultado.Metadados.Ticket, FieldType.Ticket);
+        AdicionarDoCadastro(campos.Tickets, resultado.Metadados.Ticket ?? local.TicketId, FieldType.Ticket);
         AdicionarDoCadastro(campos.Nomes, local.NomeCliente, FieldType.Nome);
         AdicionarDoCadastro(campos.Emails, local.EmailCliente, FieldType.Email);
 

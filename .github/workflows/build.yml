@@ -39,6 +39,12 @@ jobs:
           --self-contained true -p:PublishSingleFile=false
           -o publish/
 
+      - name: Publicar monitor de atividades
+        run: >
+          dotnet publish src/Piloto.LogMonitor -c Release -r win-x64
+          --self-contained true -p:PublishSingleFile=false
+          -o publish/
+
       # O worker de LLM deixou de ser publicado na 1.1: a inferência acontece no servidor.
       # Publicá-lo aqui seria trabalho perdido — o próprio instalador o apaga depois de
       # instalar, junto com as nativas do llama.cpp que o antivírus bloqueava.

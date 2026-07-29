@@ -70,7 +70,8 @@ public sealed class SincronizadorServidor : IDisposable
 
     /// <summary>Passa a acompanhar uma ligação aceita pelo servidor.</summary>
     public void Acompanhar(string callId, CallMetadata metadata,
-                           string? audioAtendente, string? audioCliente)
+                           string? audioAtendente, string? audioCliente,
+                           long? registroLocalId = null)
     {
         var espera = new Espera
         {
@@ -78,6 +79,7 @@ public sealed class SincronizadorServidor : IDisposable
             Metadata = metadata,
             AudioAtendente = audioAtendente,
             AudioCliente = audioCliente,
+            RegistroLocalId = registroLocalId,
             EnviadaEm = DateTimeOffset.Now,
         };
         File.WriteAllText(CaminhoDe(callId), JsonSerializer.Serialize(espera, Json), Encoding.UTF8);
@@ -126,6 +128,8 @@ public sealed class SincronizadorServidor : IDisposable
 
                 if (estado is null)
                 {
+                    MarcarFalha(espera, "Ligação não encontrada no servidor");
+                    ProcessamentoFalhou?.Invoke(this, "Ligação não encontrada no servidor");
                     // 404: o servidor não conhece esta ligação. Aconteceu de verdade quando
                     // o banco do servidor foi recriado — insistir para sempre não ajuda.
                     _log.LogWarning("Servidor não conhece {CallId} — deixando de acompanhar", espera.CallId);
@@ -138,6 +142,7 @@ public sealed class SincronizadorServidor : IDisposable
 
                 if (estado.Falhou)
                 {
+                    MarcarFalha(espera, estado.Erro ?? "erro no servidor");
                     _log.LogError("Servidor falhou em {CallId}: {Erro}", espera.CallId, estado.Erro);
                     ProcessamentoFalhou?.Invoke(this, estado.Erro ?? "erro no servidor");
                     File.Delete(arquivo);
@@ -168,7 +173,9 @@ public sealed class SincronizadorServidor : IDisposable
         // Reprocessamento devolve o MESMO call_id: o registro já existe e é atualizado no
         // lugar. Inserir de novo criaria a mesma ligação duas vezes na lista — e o
         // atendente ficaria sem saber qual das duas é a versão nova.
-        var existente = _repo.ObterPorUuid(registro.Uuid);
+        var existente = espera.RegistroLocalId is { } id
+            ? _repo.ObterRegistro(id)
+            : _repo.ObterPorUuid(registro.Uuid);
         if (existente is not null)
         {
             registro.Id = existente.Id;
@@ -193,6 +200,16 @@ public sealed class SincronizadorServidor : IDisposable
         RegistroPronto?.Invoke(this, registro);
     }
 
+    private void MarcarFalha(Espera espera, string erro)
+    {
+        if (espera.RegistroLocalId is not { } id) return;
+        var registro = _repo.ObterRegistro(id);
+        if (registro is null) return;
+        registro.Resumo.Status = "Falha no processamento";
+        registro.MarcarRevisao(erro);
+        _repo.AtualizarRegistro(registro);
+    }
+
     private string CaminhoDe(string callId) => Path.Combine(_aguardando, $"{callId}.json");
 
     public void Dispose()
@@ -208,6 +225,7 @@ public sealed class SincronizadorServidor : IDisposable
         public CallMetadata Metadata { get; init; } = CallMetadata.Vazio();
         public string? AudioAtendente { get; init; }
         public string? AudioCliente { get; init; }
+        public long? RegistroLocalId { get; init; }
         public DateTimeOffset EnviadaEm { get; init; }
     }
 }

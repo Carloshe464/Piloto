@@ -226,9 +226,10 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
             using (var cmd = Conn.CreateCommand())
             {
                 cmd.Transaction = tx;
-                // uuid e criado_em ficam intactos: é a mesma ligação, com conteúdo novo.
+                // criado_em fica intacto. O uuid provisório é trocado pelo call_id.
                 cmd.CommandText = """
                     UPDATE calls SET
+                        uuid=$uuid,
                         numero=$numero, ticket=$ticket, status_zendesk=$statusz, atendente=$atendente,
                         iniciada_em=$ini, encerrada_em=$fim,
                         duracao_seg=$dur, tempo_falado_seg=$falado,
@@ -241,6 +242,7 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
                     WHERE id=$id;
                     """;
                 cmd.Parameters.AddWithValue("$id", r.Id);
+                cmd.Parameters.AddWithValue("$uuid", r.Uuid);
                 cmd.Parameters.AddWithValue("$numero", (object?)r.Metadata.Numero ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$ticket", (object?)r.Metadata.TicketId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$statusz", (object?)r.Metadata.Status ?? DBNull.Value);

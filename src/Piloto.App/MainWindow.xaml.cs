@@ -242,14 +242,19 @@ public partial class MainWindow : Window
         var statusBrush = (Brush)Application.Current.Resources[_servidorNoAr ? "Sucesso" : "Perigo"];
         ServerStatusDot.Fill = statusBrush;
         TxtServerStatus.Foreground = statusBrush;
+        AtualizarBotoes(_coordinator.EstaGravando);
     }
 
     // ---------------------------------------------------------------- Interno
 
     private void AtualizarBotoes(bool gravando)
     {
-        BtnGravar.IsEnabled = !gravando;
+        BtnGravar.IsEnabled = true;
         BtnNaoGravar.IsEnabled = gravando;
+        BtnGravar.Background = (Brush)Application.Current.Resources[gravando ? "PerigoFundo" : "RecFundo"];
+        BtnGravar.BorderBrush = (Brush)Application.Current.Resources[gravando ? "Perigo" : "Acento"];
+        BtnGravar.BorderThickness = gravando ? new Thickness(2) : new Thickness(0);
+        TxtRecEstado.Text = gravando ? "GRAVANDO" : "REC";
         BtnGravar.ToolTip = gravando ? "Gravação em andamento" : "Iniciar gravação";
         BtnNaoGravar.ToolTip = gravando ? "Parar e enviar para transcrição" : "Nenhuma gravação em andamento";
     }

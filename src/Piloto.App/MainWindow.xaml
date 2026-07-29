@@ -389,7 +389,7 @@
                     BorderThickness="1" CornerRadius="8" VerticalAlignment="Center">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="92" />
+                        <ColumnDefinition Width="116" />
                         <ColumnDefinition Width="56" />
                     </Grid.ColumnDefinitions>
                     <Button x:Name="BtnGravar" Grid.Column="0" Click="BtnGravar_Click"
@@ -397,12 +397,10 @@
                             ToolTip="Iniciar gravação" AutomationProperties.Name="Iniciar gravação">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border x:Name="RecBorder" Background="{TemplateBinding Background}" CornerRadius="6">
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <Ellipse Width="13" Height="13" Fill="{DynamicResource Perigo}" />
-                                        <TextBlock Text="REC" Margin="8,0,0,0" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource Texto}" />
-                                    </StackPanel>
+                                <Border x:Name="RecBorder" Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="RecBorder" Property="Opacity" Value="0.82" /></Trigger>
@@ -410,6 +408,11 @@
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Ellipse x:Name="RecIndicator" Width="13" Height="13" Fill="{DynamicResource Perigo}" />
+                            <TextBlock x:Name="TxtRecEstado" Text="REC" Margin="8,0,0,0" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Texto}" />
+                        </StackPanel>
                     </Button>
                     <Button x:Name="BtnNaoGravar" Grid.Column="1" Click="BtnParar_Click" IsEnabled="False"
                             Margin="5,0,0,0" Background="{DynamicResource StopFundo}" BorderThickness="0"

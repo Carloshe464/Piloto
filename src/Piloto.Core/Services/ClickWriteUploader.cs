@@ -71,9 +71,12 @@ public sealed class ClickWriteUploader : IDisposable
     }
 
     /// <summary>Envia a captura. Se o servidor não responder, retém e devolve null.</summary>
-    public async Task<RespostaEnvio?> EnviarAsync(AudioCapture captura, CancellationToken ct = default)
+    public async Task<RespostaEnvio?> EnviarAsync(
+        AudioCapture captura, long? registroLocalId = null, CancellationToken ct = default)
     {
         var metadados = Converter(captura);
+        _log.LogInformation("Iniciando envio da ligação (ticket {Ticket}, duração {Duracao})",
+            captura.Metadata.TicketId ?? "-", captura.Duracao);
         try
         {
             var resposta = await PostarAsync(
@@ -85,7 +88,7 @@ public sealed class ClickWriteUploader : IDisposable
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
-            var pasta = Reter(captura, metadados);
+            var pasta = Reter(captura, metadados, registroLocalId);
             _log.LogWarning("Servidor inacessível ({Erro}); ligação retida em {Pasta}", e.Message, pasta);
             EnvioAdiado?.Invoke(this, pasta);
             return null;
@@ -154,7 +157,7 @@ public sealed class ClickWriteUploader : IDisposable
 
     // --- fila local -------------------------------------------------------
 
-    private string Reter(AudioCapture captura, MetadadosLigacao metadados)
+    private string Reter(AudioCapture captura, MetadadosLigacao metadados, long? registroLocalId)
     {
         var pasta = Path.Combine(_pendentes, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}"[..24]);
         Directory.CreateDirectory(pasta);
@@ -175,6 +178,7 @@ public sealed class ClickWriteUploader : IDisposable
                 Metadata = captura.Metadata,
                 AudioAtendente = captura.CaminhoAtendente,
                 AudioCliente = captura.CaminhoCliente,
+                RegistroLocalId = registroLocalId,
             }, Json),
             Encoding.UTF8);
 
@@ -242,7 +246,8 @@ public sealed class ClickWriteUploader : IDisposable
                     // Depois de LigacaoAceita: quem ouve isto passa a acompanhar o
                     // resultado, e o acompanhamento precisa do call_id já anunciado.
                     PendenteSubiu?.Invoke(this, new PendenteEnviada(
-                        resposta, contexto.Metadata, contexto.AudioAtendente, contexto.AudioCliente));
+                        resposta, contexto.Metadata, contexto.AudioAtendente, contexto.AudioCliente,
+                        contexto.RegistroLocalId));
                 }
                 catch (EnvioRecusadoException e)
                 {
@@ -342,7 +347,8 @@ public sealed record PendenteEnviada(
     RespostaEnvio Resposta,
     CallMetadata Metadata,
     string? AudioAtendente,
-    string? AudioCliente);
+    string? AudioCliente,
+    long? RegistroLocalId);
 
 /// <summary>
 /// O que fica guardado ao lado dos WAVs retidos além do <c>metadata.json</c> do servidor:
@@ -354,6 +360,7 @@ internal sealed record ContextoPendente
     public CallMetadata Metadata { get; init; } = CallMetadata.Vazio();
     public string? AudioAtendente { get; init; }
     public string? AudioCliente { get; init; }
+    public long? RegistroLocalId { get; init; }
 }
 
 public sealed record MetadadosLigacao

@@ -90,6 +90,7 @@ public partial class App : Application
                 alternarGravacao: () => _main!.AlternarGravacao(),
                 naoGravar: () => _main!.NaoGravar(),
                 configuracoes: () => _main!.AbrirConfiguracoes(),
+                abrirMonitor: AbrirMonitor,
                 sair: Encerrar);
 
             coordinator.EstadoGravacaoMudou += (_, gravando) =>
@@ -103,6 +104,11 @@ public partial class App : Application
                 var fila = resposta.Posicao is > 0 ? $" (posição {resposta.Posicao} na fila)" : "";
                 _main!.MostrarStatus(
                     $"Ligação enviada ao servidor{fila} — transcrição e resumo a caminho…");
+            });
+
+            coordinator.RegistroProvisorioCriado += (_, _) => Dispatcher.Invoke(() =>
+            {
+                _main!.Recarregar();
             });
 
             coordinator.EnvioAdiado += (_, pasta) => Dispatcher.Invoke(() =>
@@ -129,6 +135,7 @@ public partial class App : Application
             {
                 _tray!.Notificar("Click Write — falha no servidor", erro);
                 _main!.MostrarStatus($"O servidor não conseguiu processar a ligação: {erro}");
+                _main.Recarregar();
             });
 
             // Só depois de a tela e as notificações estarem ligadas: o reenvio dispara
@@ -242,6 +249,23 @@ public partial class App : Application
         _main.Show();
         _main.WindowState = WindowState.Normal;
         _main.Activate();
+    }
+
+    private void AbrirMonitor()
+    {
+        var executavel = Path.Combine(AppContext.BaseDirectory, "ClickWrite.LogMonitor.exe");
+        if (!File.Exists(executavel))
+        {
+            _main?.MostrarStatus("Monitor de atividades não encontrado nesta instalação.");
+            return;
+        }
+
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(executavel)
+        {
+            UseShellExecute = true,
+            WorkingDirectory = AppContext.BaseDirectory,
+        });
+        _log?.LogInformation("Monitor de atividades aberto");
     }
 
     private void Encerrar()

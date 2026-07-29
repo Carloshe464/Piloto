@@ -143,14 +143,14 @@ public class MapeadorResultadoTests
     }
 
     [Fact]
-    public void Ticket_da_extensao_entra_como_campo_objetivo()
+    public void Ticket_do_servidor_substitui_o_provisorio_da_extensao()
     {
         // O ticket não é ouvido na ligação: vem do Zendesk pela extensão. Sem ele na
         // lista, o atendente não tem como amarrar a gravação ao atendimento.
         var registro = Mapear(local: new CallMetadata { TicketId = "12345" });
 
         var ticket = Assert.Single(registro.Campos.Tickets);
-        Assert.Equal("12345", ticket.Valor);
+        Assert.Equal("99887", ticket.Valor);
         Assert.True(ticket.EhDoCadastro);
     }
 
@@ -158,6 +158,40 @@ public class MapeadorResultadoTests
     public void Ticket_dos_metadados_vale_quando_a_extensao_nao_leu()
     {
         Assert.Equal("99887", Assert.Single(Mapear().Campos.Tickets).Valor);
+    }
+
+    [Fact]
+    public void Telefone_objetivo_do_servidor_substitui_o_da_extensao()
+    {
+        var json = JsonServidor.Replace(
+            "\"telefone\": null",
+            "\"telefone\": { \"valor\": \"21999998888\", \"formatado\": \"(21) 99999-8888\", \"confianca\": 0.91, \"origem\": \"transcricao\" }");
+        var local = new CallMetadata { Numero = "11911112222", TelefoneCliente = "11933334444" };
+
+        var registro = Mapear(json, local);
+
+        Assert.Equal("(21) 99999-8888", Assert.Single(registro.Campos.Telefones).Valor);
+        Assert.Equal("(21) 99999-8888", registro.Metadata.TelefoneCliente);
+    }
+
+    [Fact]
+    public void Registro_provisorio_expoe_ticket_e_telefone_sem_aguardar_api()
+    {
+        var captura = new AudioCapture
+        {
+            CaminhoAtendente = "agente.wav",
+            CaminhoCliente = "cliente.wav",
+            IniciadaEm = DateTimeOffset.Now.AddMinutes(-1),
+            EncerradaEm = DateTimeOffset.Now,
+            Metadata = new CallMetadata { TicketId = "12345", TelefoneCliente = "11933334444" },
+        };
+
+        var registro = MapeadorResultado.CriarProvisorio(captura);
+
+        Assert.StartsWith("local-", registro.Uuid);
+        Assert.Equal("Processando", registro.Resumo.Status);
+        Assert.Equal("12345", Assert.Single(registro.Campos.Tickets).Valor);
+        Assert.Equal("11933334444", Assert.Single(registro.Campos.Telefones).Valor);
     }
 
     [Fact]
@@ -182,14 +216,14 @@ public class MapeadorResultadoTests
     }
 
     [Fact]
-    public void Cadastro_do_zendesk_vence_o_que_foi_ouvido()
+    public void Nome_do_cadastro_e_mantido_mas_ticket_final_do_servidor_vence()
     {
         var local = new CallMetadata { NomeCliente = "Carlos H. Lemos", TicketId = "12345" };
 
         var registro = Mapear(local: local);
 
         Assert.Equal("Carlos H. Lemos", registro.Metadata.NomeCliente);
-        Assert.Equal("12345", registro.Metadata.TicketId);
+        Assert.Equal("99887", registro.Metadata.TicketId);
     }
 
     // ------------------------------------------------------------ transcrição

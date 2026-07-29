@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Piloto.LogMonitor</RootNamespace>
+    <AssemblyName>ClickWrite.LogMonitor</AssemblyName>
+    <ApplicationIcon>..\Piloto.App\Assets\click-write.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="..\Piloto.App\Assets\click-write-icon.png" Link="Assets\click-write-icon.png" />
+    <Resource Include="..\Piloto.App\Assets\click-write.ico" Link="Assets\click-write.ico" />
+  </ItemGroup>
+</Project>

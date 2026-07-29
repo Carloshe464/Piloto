@@ -19,6 +19,7 @@ public sealed class RecordingCoordinator
     private readonly ClickWriteUploader _uploader;
     private readonly SincronizadorServidor _sincronizador;
     private readonly ZendeskBridgeServer _bridge;
+    private readonly ICallRepository _repo;
     private readonly ILogger<RecordingCoordinator> _log;
     private readonly object _lock = new();
 
@@ -26,12 +27,13 @@ public sealed class RecordingCoordinator
 
     /// <summary>Estado do gravador manual (botão da UI); a sessão da extensão é
     /// autônoma e sinalizada apenas via <see cref="EstadoGravacaoMudou"/>.</summary>
-    public bool EstaGravando => _recorder.EstaGravando;
+    public bool EstaGravando => _recorder.EstaGravando || _extensao.Ativa;
     public CallMetadata MetadataCorrente { get { lock (_lock) return _metadataCorrente; } }
 
     public event EventHandler<bool>? EstadoGravacaoMudou;
     public event EventHandler<string>? AvisoCaptura;
     public event EventHandler? MetadataMudou;
+    public event EventHandler<CallRecord>? RegistroProvisorioCriado;
 
     /// <summary>Servidor aceitou a ligação. O argumento traz o call_id.</summary>
     public event EventHandler<RespostaEnvio>? ChamadaEnviada;
@@ -45,6 +47,7 @@ public sealed class RecordingCoordinator
         ClickWriteUploader uploader,
         SincronizadorServidor sincronizador,
         ZendeskBridgeServer bridge,
+        ICallRepository repo,
         ILogger<RecordingCoordinator> log)
     {
         _recorder = recorder;
@@ -52,6 +55,7 @@ public sealed class RecordingCoordinator
         _uploader = uploader;
         _sincronizador = sincronizador;
         _bridge = bridge;
+        _repo = repo;
         _log = log;
 
         _recorder.EstadoGravacaoMudou += (_, gravando) => EstadoGravacaoMudou?.Invoke(this, gravando);
@@ -78,8 +82,15 @@ public sealed class RecordingCoordinator
     {
         try
         {
+            if (e.RegistroLocalId is { } registroId && _repo.ObterRegistro(registroId) is { } provisoria)
+            {
+                provisoria.Resumo.Status = "Processando";
+                _repo.AtualizarRegistro(provisoria);
+                RegistroProvisorioCriado?.Invoke(this, provisoria);
+            }
             _sincronizador.Acompanhar(
-                e.Resposta.CallId, e.Metadata, e.AudioAtendente, e.AudioCliente);
+                e.Resposta.CallId, e.Metadata, e.AudioAtendente, e.AudioCliente,
+                e.RegistroLocalId);
             _log.LogInformation("Ligação {CallId} enviada ao servidor — fila local (reenvio automático)",
                                 e.Resposta.CallId);
             ChamadaEnviada?.Invoke(this, e.Resposta);
@@ -112,6 +123,9 @@ public sealed class RecordingCoordinator
         }
 
         _extensao.Iniciar(snapshot, taxa);
+        _log.LogInformation(
+            "Gravação automática iniciada pela extensão (ticket {Ticket}, telefone {Telefone})",
+            snapshot.TicketId ?? "-", snapshot.TelefoneCliente ?? snapshot.Numero ?? "-");
         EstadoGravacaoMudou?.Invoke(this, true);
     }
 
@@ -124,6 +138,7 @@ public sealed class RecordingCoordinator
         if (captura is null) return;
 
         CompletarMetadata(captura.Metadata);
+        _log.LogInformation("Gravação automática encerrada ({Duracao})", captura.Duracao);
         Enviar(captura, "captura automática pela extensão");
         LimparMetadata();
     }
@@ -139,13 +154,26 @@ public sealed class RecordingCoordinator
     /// </summary>
     private void Enviar(AudioCapture captura, string origem)
     {
+        var provisoria = MapeadorResultado.CriarProvisorio(captura);
+        provisoria.Id = _repo.SalvarRegistro(provisoria);
+        _log.LogInformation(
+            "Registro provisório {Id} criado (ticket {Ticket}, telefone {Telefone})",
+            provisoria.Id, provisoria.Metadata.TicketId ?? "-",
+            provisoria.Metadata.TelefoneCliente ?? provisoria.Metadata.Numero ?? "-");
+        RegistroProvisorioCriado?.Invoke(this, provisoria);
+
         _ = Task.Run(async () =>
         {
             try
             {
-                var resposta = await _uploader.EnviarAsync(captura).ConfigureAwait(false);
+                var resposta = await _uploader.EnviarAsync(captura, provisoria.Id).ConfigureAwait(false);
                 if (resposta is null)
-                    return;  // retida; o próprio uploader já disparou EnvioAdiado
+                {
+                    provisoria.Resumo.Status = "Aguardando envio";
+                    _repo.AtualizarRegistro(provisoria);
+                    RegistroProvisorioCriado?.Invoke(this, provisoria);
+                    return;
+                }
 
                 // A espera vai para disco antes de qualquer notificação de tela: se o app
                 // fechar no instante seguinte, o resultado continua sendo buscado na
@@ -153,7 +181,7 @@ public sealed class RecordingCoordinator
                 // que não ter enviado.
                 _sincronizador.Acompanhar(
                     resposta.CallId, captura.Metadata,
-                    captura.CaminhoAtendente, captura.CaminhoCliente);
+                    captura.CaminhoAtendente, captura.CaminhoCliente, provisoria.Id);
 
                 _log.LogInformation("Ligação {CallId} enviada ao servidor — {Origem}",
                                     resposta.CallId, origem);
@@ -161,6 +189,10 @@ public sealed class RecordingCoordinator
             }
             catch (Exception e)
             {
+                provisoria.Resumo.Status = "Falha no envio";
+                provisoria.MarcarRevisao($"Falha no envio: {e.Message}");
+                _repo.AtualizarRegistro(provisoria);
+                RegistroProvisorioCriado?.Invoke(this, provisoria);
                 _log.LogError(e, "Falha ao enviar a ligação ao servidor");
                 AvisoCaptura?.Invoke(this, $"Falha ao enviar ao servidor: {e.Message}");
             }
@@ -169,8 +201,14 @@ public sealed class RecordingCoordinator
 
     private void AtualizarMetadata(CallMetadata meta)
     {
+        var mudouIdentificacao = false;
         lock (_lock)
         {
+            mudouIdentificacao = (!string.IsNullOrWhiteSpace(meta.TicketId)
+                                   && meta.TicketId != _metadataCorrente.TicketId)
+                                  || (!string.IsNullOrWhiteSpace(meta.TelefoneCliente ?? meta.Numero)
+                                      && (meta.TelefoneCliente ?? meta.Numero)
+                                      != (_metadataCorrente.TelefoneCliente ?? _metadataCorrente.Numero));
             // Preserva campos já conhecidos quando a nova mensagem vier parcial.
             _metadataCorrente = new CallMetadata
             {
@@ -188,6 +226,9 @@ public sealed class RecordingCoordinator
                 EncerradaEm = meta.EncerradaEm ?? _metadataCorrente.EncerradaEm,
             };
         }
+        if (mudouIdentificacao)
+            _log.LogInformation("Metadados recebidos da extensão (ticket {Ticket}, telefone {Telefone})",
+                meta.TicketId ?? "-", meta.TelefoneCliente ?? meta.Numero ?? "-");
         MetadataMudou?.Invoke(this, EventArgs.Empty);
     }
 
@@ -205,7 +246,8 @@ public sealed class RecordingCoordinator
     /// <summary>Para a gravação e envia ao servidor. O resultado chega por evento.</summary>
     public void PararEEnviar()
     {
-        var captura = _recorder.Parar();
+        var captura = _extensao.Ativa ? _extensao.Encerrar() : _recorder.Parar();
+        if (captura is null) return;
         CompletarMetadata(captura.Metadata);
         Enviar(captura, "gravação manual");
         LimparMetadata();
@@ -213,7 +255,9 @@ public sealed class RecordingCoordinator
 
     public void Descartar()
     {
-        _recorder.Descartar();
+        if (_extensao.Ativa) _extensao.Descartar();
+        else _recorder.Descartar();
+        EstadoGravacaoMudou?.Invoke(this, false);
         LimparMetadata();
     }
 

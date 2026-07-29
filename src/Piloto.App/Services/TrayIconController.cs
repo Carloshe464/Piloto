@@ -23,7 +23,8 @@ public sealed class TrayIconController : IDisposable
     private static readonly Icon IconeOcioso = CarregarIconeAplicativo();
     private static readonly Icon IconeGravando = CriarIconeGravando(IconeOcioso);
 
-    public TrayIconController(Action abrir, Action alternarGravacao, Action naoGravar, Action configuracoes, Action sair)
+    public TrayIconController(Action abrir, Action alternarGravacao, Action naoGravar,
+        Action configuracoes, Action abrirMonitor, Action sair)
     {
         _itemGravar = new MenuItem { Header = "Iniciar gravação" };
         _itemGravar.Click += (_, _) => alternarGravacao();
@@ -37,6 +38,9 @@ public sealed class TrayIconController : IDisposable
         var itemConfig = new MenuItem { Header = "Configurações…" };
         itemConfig.Click += (_, _) => configuracoes();
 
+        var itemMonitor = new MenuItem { Header = "Monitor de atividades" };
+        itemMonitor.Click += (_, _) => abrirMonitor();
+
         var itemSair = new MenuItem { Header = "Sair" };
         itemSair.Click += (_, _) => sair();
 
@@ -46,6 +50,7 @@ public sealed class TrayIconController : IDisposable
         menu.Items.Add(_itemGravar);
         menu.Items.Add(_itemNaoGravar);
         menu.Items.Add(new Separator());
+        menu.Items.Add(itemMonitor);
         menu.Items.Add(itemConfig);
         menu.Items.Add(itemSair);
 

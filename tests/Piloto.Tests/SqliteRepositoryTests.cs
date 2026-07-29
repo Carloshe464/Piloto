@@ -91,6 +91,20 @@ public class SqliteRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void AtualizacaoTrocaUuidProvisorioPeloCallId()
+    {
+        var registro = Registro("processando");
+        registro.Uuid = "local-123";
+        registro.Id = _repo.SalvarRegistro(registro);
+        registro.Uuid = "call-servidor-456";
+
+        _repo.AtualizarRegistro(registro);
+
+        Assert.Null(_repo.ObterPorUuid("local-123"));
+        Assert.Equal(registro.Id, _repo.ObterPorUuid("call-servidor-456")!.Id);
+    }
+
+    [Fact]
     public void BuscaFtsEncontraPorTermo()
     {
         _repo.SalvarRegistro(Registro("cliente quer segunda via do boleto"));

@@ -26,6 +26,12 @@ dotnet publish (Join-Path $raiz 'src\Piloto.App') `
     -p:PublishSingleFile=false `
     -o (Join-Path $raiz 'publish')
 
+Write-Passo 'dotnet publish (monitor de atividades)'
+dotnet publish (Join-Path $raiz 'src\Piloto.LogMonitor') `
+    -c $Configuracao -r $Runtime --self-contained true `
+    -p:PublishSingleFile=false `
+    -o (Join-Path $raiz 'publish')
+
 # Localiza iscc.exe
 $iscc = @(
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
