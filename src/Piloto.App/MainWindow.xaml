@@ -6,6 +6,7 @@
         MinHeight="640" MinWidth="980"
         FontFamily="Segoe UI"
         FontSize="14"
+        Icon="Assets/click-write.ico"
         Background="{DynamicResource Fundo}"
         WindowStartupLocation="CenterScreen">
 
@@ -294,19 +295,9 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <Border Width="74" Height="74" CornerRadius="16"
-                        Background="{DynamicResource AcentoFundo}"
-                        BorderBrush="{DynamicResource Acento}" BorderThickness="1">
-                    <Grid Margin="10">
-                        <Path Data="M 45,10 A 25,25 0 1 0 45,48" Stroke="{DynamicResource Acento}"
-                              StrokeThickness="5" StrokeStartLineCap="Round" Fill="Transparent" />
-                        <Path Data="M 10,34 L 17,34 L 20,22 L 25,45 L 30,27 L 35,38 L 43,38"
-                              Stroke="{DynamicResource Texto}" StrokeThickness="3.2"
-                              StrokeStartLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" />
-                        <Path Data="M 45,42 L 52,18 L 57,20 L 50,44 Z M 52,18 L 56,12 L 57,20"
-                              Stroke="{DynamicResource Texto}" StrokeThickness="2" Fill="{DynamicResource Texto}" />
-                    </Grid>
-                </Border>
+                <Image Width="74" Height="74" Source="Assets/click-write-icon.png"
+                       Stretch="Uniform" SnapsToDevicePixels="True"
+                       AutomationProperties.Name="Logotipo Click Write" />
                 <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Click" FontSize="30" FontWeight="Bold" Foreground="{DynamicResource AcentoClaro}" />

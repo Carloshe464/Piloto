@@ -194,16 +194,16 @@ public partial class MainWindow : Window
         var cores = claro
             ? new Dictionary<string, string>
             {
-                ["Fundo"] = "#F7F4EE", ["Painel"] = "#FFFFFF", ["PainelAlto"] = "#F3F1EC",
-                ["Entrada"] = "#FCFBF8", ["Borda"] = "#D5CEC1", ["BordaClara"] = "#BDB4A5",
-                ["Texto"] = "#333333", ["TextoFraco"] = "#655F58", ["TextoApagado"] = "#948C82",
-                ["Acento"] = "#5AB7C2", ["AcentoClaro"] = "#277985", ["AcentoFundo"] = "#E0F7FA",
-                ["BotaoFundo"] = "#EAF8F8", ["TabelaCabecalho"] = "#F2EEE6", ["Divisor"] = "#D8D0C3",
-                ["LinhaHover"] = "#F1F8F7", ["LinhaSelecionada"] = "#D8F0F2", ["BarraRolagem"] = "#B9AF9F",
-                ["RecFundo"] = "#CDEFF1", ["StopFundo"] = "#E5E3DF",
-                ["Sucesso"] = "#26936C", ["SucessoClaro"] = "#17694D", ["SucessoFundo"] = "#E2F5EC",
-                ["Alerta"] = "#C2872A", ["AlertaClaro"] = "#704A12", ["AlertaFundo"] = "#FFF0D4",
-                ["Perigo"] = "#C84B55", ["PerigoClaro"] = "#9F2833", ["PerigoFundo"] = "#FFEBEE",
+                ["Fundo"] = "#D8D2C8", ["Painel"] = "#E6E0D6", ["PainelAlto"] = "#DCD6CC",
+                ["Entrada"] = "#E2DDD4", ["Borda"] = "#B9B0A4", ["BordaClara"] = "#9F978C",
+                ["Texto"] = "#303638", ["TextoFraco"] = "#5D625F", ["TextoApagado"] = "#85817A",
+                ["Acento"] = "#4E9FA7", ["AcentoClaro"] = "#23666E", ["AcentoFundo"] = "#C9DEDD",
+                ["BotaoFundo"] = "#D1E3E2", ["TabelaCabecalho"] = "#D6D0C6", ["Divisor"] = "#BBB3A7",
+                ["LinhaHover"] = "#D5E1DF", ["LinhaSelecionada"] = "#B8D4D2", ["BarraRolagem"] = "#918A80",
+                ["RecFundo"] = "#BED9D8", ["StopFundo"] = "#CFCCC6",
+                ["Sucesso"] = "#327A60", ["SucessoClaro"] = "#285F4D", ["SucessoFundo"] = "#C8D8CF",
+                ["Alerta"] = "#A8752B", ["AlertaClaro"] = "#654817", ["AlertaFundo"] = "#E5D4B6",
+                ["Perigo"] = "#AA4D55", ["PerigoClaro"] = "#83363D", ["PerigoFundo"] = "#E3C9CB",
             }
             : new Dictionary<string, string>
             {

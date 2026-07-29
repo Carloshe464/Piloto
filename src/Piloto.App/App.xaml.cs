@@ -28,6 +28,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        SplashScreen? splash = null;
 
         _mutex = new Mutex(initiallyOwned: false, NomeMutex, out var primeiraInstancia);
         if (!primeiraInstancia)
@@ -40,6 +41,16 @@ public partial class App : Application
             _mutex = null;
             Shutdown(0);
             return;
+        }
+
+        try
+        {
+            splash = new SplashScreen("Assets/click-write-splash.png");
+            splash.Show(autoClose: false, topMost: true);
+        }
+        catch
+        {
+            // Identidade visual não pode impedir a inicialização do aplicativo.
         }
 
         DispatcherUnhandledException += OnUnhandled;
@@ -147,9 +158,11 @@ public partial class App : Application
             _ = Task.Run(() => AplicarRetencao(repo));
 
             MostrarPrincipal();
+            splash?.Close(TimeSpan.FromMilliseconds(280));
         }
         catch (Exception ex)
         {
+            splash?.Close(TimeSpan.Zero);
             var arquivo = RegistrarErroInicializacao(ex);
             _log?.LogError(ex, "Falha ao iniciar o Click Write");
             MessageBox.Show(

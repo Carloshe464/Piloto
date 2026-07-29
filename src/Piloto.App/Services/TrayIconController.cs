@@ -20,8 +20,8 @@ public sealed class TrayIconController : IDisposable
     private readonly MenuItem _itemGravar;
     private readonly MenuItem _itemNaoGravar;
 
-    private static readonly Icon IconeOcioso = CriarIcone(Color.FromArgb(0x6b, 0x72, 0x80));
-    private static readonly Icon IconeGravando = CriarIcone(Color.FromArgb(0xdc, 0x26, 0x26));
+    private static readonly Icon IconeOcioso = CarregarIconeAplicativo();
+    private static readonly Icon IconeGravando = CriarIconeGravando(IconeOcioso);
 
     public TrayIconController(Action abrir, Action alternarGravacao, Action naoGravar, Action configuracoes, Action sair)
     {
@@ -69,7 +69,36 @@ public sealed class TrayIconController : IDisposable
     public void Notificar(string titulo, string mensagem)
         => _tray.ShowBalloonTip(titulo, mensagem, BalloonIcon.Info);
 
-    /// <summary>Desenha um ícone circular colorido (bandeja) sem depender de recursos/URIs.</summary>
+    private static Icon CarregarIconeAplicativo()
+    {
+        var caminho = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(caminho) && File.Exists(caminho))
+        {
+            using var extraido = Icon.ExtractAssociatedIcon(caminho);
+            if (extraido is not null) return (Icon)extraido.Clone();
+        }
+
+        return CriarIcone(Color.FromArgb(0x0f, 0x68, 0x73));
+    }
+
+    /// <summary>Mantém a marca visível e acrescenta um indicador vermelho durante a gravação.</summary>
+    private static Icon CriarIconeGravando(Icon baseIcon)
+    {
+        using var bmp = new Bitmap(32, 32);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(Color.Transparent);
+            g.DrawIcon(baseIcon, new Rectangle(0, 0, 32, 32));
+            using var contorno = new SolidBrush(Color.White);
+            using var gravando = new SolidBrush(Color.FromArgb(0xdc, 0x26, 0x26));
+            g.FillEllipse(contorno, 20, 20, 12, 12);
+            g.FillEllipse(gravando, 22, 22, 8, 8);
+        }
+        return Icon.FromHandle(bmp.GetHicon());
+    }
+
+    /// <summary>Fallback simples para ambientes que não expõem o ícone do executável.</summary>
     private static Icon CriarIcone(Color cor)
     {
         using var bmp = new Bitmap(32, 32);
