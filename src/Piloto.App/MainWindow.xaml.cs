@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Piloto.App.Services;
@@ -28,6 +29,7 @@ public partial class MainWindow : Window
 
     private readonly ObservableCollection<CallRowVm> _linhas = new();
     private readonly DispatcherTimer _timer;
+    private bool _atualizandoSelecao;
 
     public MainWindow(
         ICallRepository repo,
@@ -124,7 +126,16 @@ public partial class MainWindow : Window
 
     // ---------------------------------------------------------------- Handlers
 
-    private void BtnGravar_Click(object sender, RoutedEventArgs e) => AlternarGravacao();
+    private void BtnGravar_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_coordinator.EstaGravando) AlternarGravacao();
+    }
+
+    private void BtnParar_Click(object sender, RoutedEventArgs e)
+    {
+        if (_coordinator.EstaGravando) AlternarGravacao();
+    }
+
     private void BtnNaoGravar_Click(object sender, RoutedEventArgs e) => NaoGravar();
     private void BtnConfig_Click(object sender, RoutedEventArgs e) => AbrirConfiguracoes();
     private void BtnAtualizar_Click(object sender, RoutedEventArgs e) => Recarregar();
@@ -146,12 +157,84 @@ public partial class MainWindow : Window
         Recarregar(); // um reprocessamento pode ter sido enfileirado no detalhe
     }
 
+    private void ChkSelecionarTudo_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_atualizandoSelecao) return;
+        _atualizandoSelecao = true;
+        ListaChamadas.SelectAll();
+        _atualizandoSelecao = false;
+        AtualizarEstadoSelecao();
+    }
+
+    private void ChkSelecionarTudo_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (_atualizandoSelecao) return;
+        _atualizandoSelecao = true;
+        ListaChamadas.UnselectAll();
+        _atualizandoSelecao = false;
+        AtualizarEstadoSelecao();
+    }
+
+    private void ListaChamadas_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => AtualizarEstadoSelecao();
+
+    private void AtualizarEstadoSelecao()
+    {
+        if (!IsInitialized) return;
+        var quantidade = ListaChamadas.SelectedItems.Count;
+        TxtSelecionadas.Text = quantidade == 1 ? "1 selecionada" : $"{quantidade} selecionadas";
+        BtnExcluirSelecionadas.IsEnabled = quantidade > 0;
+    }
+
+    private void ThemeToggleButton_Checked(object sender, RoutedEventArgs e) => AplicarTema(claro: true);
+    private void ThemeToggleButton_Unchecked(object sender, RoutedEventArgs e) => AplicarTema(claro: false);
+
+    private void AplicarTema(bool claro)
+    {
+        var cores = claro
+            ? new Dictionary<string, string>
+            {
+                ["Fundo"] = "#F7F4EE", ["Painel"] = "#FFFFFF", ["PainelAlto"] = "#F3F1EC",
+                ["Entrada"] = "#FCFBF8", ["Borda"] = "#D5CEC1", ["BordaClara"] = "#BDB4A5",
+                ["Texto"] = "#333333", ["TextoFraco"] = "#655F58", ["TextoApagado"] = "#948C82",
+                ["Acento"] = "#5AB7C2", ["AcentoClaro"] = "#277985", ["AcentoFundo"] = "#E0F7FA",
+                ["BotaoFundo"] = "#EAF8F8", ["TabelaCabecalho"] = "#F2EEE6", ["Divisor"] = "#D8D0C3",
+                ["LinhaHover"] = "#F1F8F7", ["LinhaSelecionada"] = "#D8F0F2", ["BarraRolagem"] = "#B9AF9F",
+                ["RecFundo"] = "#CDEFF1", ["StopFundo"] = "#E5E3DF",
+                ["Sucesso"] = "#26936C", ["SucessoClaro"] = "#17694D", ["SucessoFundo"] = "#E2F5EC",
+                ["Alerta"] = "#C2872A", ["AlertaClaro"] = "#704A12", ["AlertaFundo"] = "#FFF0D4",
+                ["Perigo"] = "#C84B55", ["PerigoClaro"] = "#9F2833", ["PerigoFundo"] = "#FFEBEE",
+            }
+            : new Dictionary<string, string>
+            {
+                ["Fundo"] = "#0F172A", ["Painel"] = "#1E293B", ["PainelAlto"] = "#263449",
+                ["Entrada"] = "#111C30", ["Borda"] = "#334155", ["BordaClara"] = "#4B607C",
+                ["Texto"] = "#F8FAFC", ["TextoFraco"] = "#A8B5C7", ["TextoApagado"] = "#66758B",
+                ["Acento"] = "#06B6D4", ["AcentoClaro"] = "#67E8F9", ["AcentoFundo"] = "#123A49",
+                ["BotaoFundo"] = "#08111F", ["TabelaCabecalho"] = "#192438", ["Divisor"] = "#34435A",
+                ["LinhaHover"] = "#26364C", ["LinhaSelecionada"] = "#244B5D", ["BarraRolagem"] = "#6B7C93",
+                ["RecFundo"] = "#294E58", ["StopFundo"] = "#334155",
+                ["Sucesso"] = "#34D399", ["SucessoClaro"] = "#6EE7B7", ["SucessoFundo"] = "#10291E",
+                ["Alerta"] = "#FBBF24", ["AlertaClaro"] = "#FDE68A", ["AlertaFundo"] = "#3A2A08",
+                ["Perigo"] = "#F87171", ["PerigoClaro"] = "#FCA5A5", ["PerigoFundo"] = "#2A1420",
+            };
+
+        foreach (var (chave, hexadecimal) in cores)
+            Application.Current.Resources[chave] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hexadecimal));
+
+        var statusBrush = (Brush)Application.Current.Resources[_servidorNoAr ? "Sucesso" : "Perigo"];
+        ServerStatusDot.Fill = statusBrush;
+        TxtServerStatus.Foreground = statusBrush;
+    }
+
     // ---------------------------------------------------------------- Interno
 
     private void AtualizarBotoes(bool gravando)
     {
-        BtnGravar.Content = gravando ? "■ Parar e transcrever" : "● Iniciar gravação";
+        BtnGravar.IsEnabled = !gravando;
         BtnNaoGravar.IsEnabled = gravando;
+        BtnGravar.ToolTip = gravando ? "Gravação em andamento" : "Iniciar gravação";
+        BtnNaoGravar.ToolTip = gravando ? "Parar e enviar para transcrição" : "Nenhuma gravação em andamento";
     }
 
     /// <summary>
@@ -175,6 +258,11 @@ public partial class MainWindow : Window
                   + $"ficam guardadas nesta máquina ({retidas} no momento) e sobem sozinhas.";
             BannerModelos.Visibility = Visibility.Visible;
         }
+
+        TxtServerStatus.Text = _servidorNoAr ? "Conectado" : "Desconectado";
+        var statusBrush = (Brush)Application.Current.Resources[_servidorNoAr ? "Sucesso" : "Perigo"];
+        ServerStatusDot.Fill = statusBrush;
+        TxtServerStatus.Foreground = statusBrush;
 
         VerificarServidor();
     }

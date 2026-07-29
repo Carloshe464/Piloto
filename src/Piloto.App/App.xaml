@@ -5,18 +5,26 @@
     <Application.Resources>
 
         <!-- ============================ Paleta ============================ -->
-        <SolidColorBrush x:Key="Fundo" Color="#0B1220" />
-        <SolidColorBrush x:Key="Painel" Color="#141F37" />
-        <SolidColorBrush x:Key="PainelAlto" Color="#1C2A47" />
-        <SolidColorBrush x:Key="Entrada" Color="#101A2E" />
-        <SolidColorBrush x:Key="Borda" Color="#263450" />
-        <SolidColorBrush x:Key="BordaClara" Color="#3B4F76" />
-        <SolidColorBrush x:Key="Texto" Color="#E6EDF7" />
-        <SolidColorBrush x:Key="TextoFraco" Color="#8CA0BF" />
-        <SolidColorBrush x:Key="TextoApagado" Color="#5A6B8C" />
-        <SolidColorBrush x:Key="Acento" Color="#38BDF8" />
-        <SolidColorBrush x:Key="AcentoClaro" Color="#7DD3FC" />
-        <SolidColorBrush x:Key="AcentoFundo" Color="#0C2C41" />
+        <SolidColorBrush x:Key="Fundo" Color="#0F172A" />
+        <SolidColorBrush x:Key="Painel" Color="#1E293B" />
+        <SolidColorBrush x:Key="PainelAlto" Color="#263449" />
+        <SolidColorBrush x:Key="Entrada" Color="#111C30" />
+        <SolidColorBrush x:Key="Borda" Color="#334155" />
+        <SolidColorBrush x:Key="BordaClara" Color="#4B607C" />
+        <SolidColorBrush x:Key="Texto" Color="#F8FAFC" />
+        <SolidColorBrush x:Key="TextoFraco" Color="#A8B5C7" />
+        <SolidColorBrush x:Key="TextoApagado" Color="#66758B" />
+        <SolidColorBrush x:Key="Acento" Color="#06B6D4" />
+        <SolidColorBrush x:Key="AcentoClaro" Color="#67E8F9" />
+        <SolidColorBrush x:Key="AcentoFundo" Color="#123A49" />
+        <SolidColorBrush x:Key="BotaoFundo" Color="#08111F" />
+        <SolidColorBrush x:Key="TabelaCabecalho" Color="#192438" />
+        <SolidColorBrush x:Key="Divisor" Color="#34435A" />
+        <SolidColorBrush x:Key="LinhaHover" Color="#26364C" />
+        <SolidColorBrush x:Key="LinhaSelecionada" Color="#244B5D" />
+        <SolidColorBrush x:Key="BarraRolagem" Color="#6B7C93" />
+        <SolidColorBrush x:Key="RecFundo" Color="#294E58" />
+        <SolidColorBrush x:Key="StopFundo" Color="#334155" />
         <SolidColorBrush x:Key="Sucesso" Color="#34D399" />
         <SolidColorBrush x:Key="SucessoClaro" Color="#6EE7B7" />
         <SolidColorBrush x:Key="SucessoFundo" Color="#10291E" />

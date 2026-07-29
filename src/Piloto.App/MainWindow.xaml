@@ -1,69 +1,457 @@
 <Window x:Class="Piloto.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Click Write — Transcrição Local de Ligações"
-        Height="680" Width="1080"
-        MinHeight="500" MinWidth="860"
-        Background="{StaticResource Fundo}"
+        Title="Click Write - Transcrição Local de Ligações"
+        Height="820" Width="1280"
+        MinHeight="640" MinWidth="980"
+        FontFamily="Segoe UI"
+        FontSize="14"
+        Background="{DynamicResource Fundo}"
         WindowStartupLocation="CenterScreen">
 
-    <Grid Margin="18">
+    <Window.Resources>
+        <!-- Icones vetoriais simples, independentes de bibliotecas externas. -->
+        <Geometry x:Key="RefreshIcon">M 15,4 A 7,7 0 1 0 17,13 M 15,4 L 15,9 L 10,9</Geometry>
+        <Geometry x:Key="SettingsIcon">M 10,2 L 12,2 13,5 16,6 19,4 20,6 18,9 19,12 22,13 22,15 19,16 18,19 20,22 18,24 15,22 12,23 11,26 9,26 8,23 5,22 2,24 0,22 2,19 1,16 -2,15 -2,13 1,12 2,9 0,6 2,4 5,6 8,5 Z M 10,10 A 4,4 0 1 0 10,18 A 4,4 0 1 0 10,10</Geometry>
+        <Geometry x:Key="TrashIcon">M 5,7 L 19,7 M 9,7 L 9,4 L 15,4 L 15,7 M 7,7 L 8,21 L 16,21 L 17,7 M 10,10 L 10,18 M 14,10 L 14,18</Geometry>
+        <Geometry x:Key="SearchIcon">M 10,4 A 6,6 0 1 0 10,16 A 6,6 0 1 0 10,4 M 15,15 L 21,21</Geometry>
+
+        <Style x:Key="IconPath" TargetType="Path">
+            <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+            <Setter Property="StrokeThickness" Value="1.8" />
+            <Setter Property="StrokeStartLineCap" Value="Round" />
+            <Setter Property="StrokeEndLineCap" Value="Round" />
+            <Setter Property="StrokeLineJoin" Value="Round" />
+            <Setter Property="Stretch" Value="Uniform" />
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+        </Style>
+
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="MinHeight" Value="46" />
+            <Setter Property="Padding" Value="18,9" />
+            <Setter Property="Background" Value="{DynamicResource BotaoFundo}" />
+            <Setter Property="Foreground" Value="{DynamicResource AcentoClaro}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Acento}" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AcentoFundo}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.78" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.42" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource ActionButton}">
+            <Setter Property="Foreground" Value="{DynamicResource PerigoClaro}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Perigo}" />
+            <Setter Property="Background" Value="{DynamicResource PerigoFundo}" />
+        </Style>
+
+        <Style x:Key="CheckBoxLarge" TargetType="CheckBox">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Width="22" Height="22">
+                            <Border x:Name="Box" CornerRadius="5"
+                                    Background="Transparent"
+                                    BorderBrush="{DynamicResource BordaClara}"
+                                    BorderThickness="1.5" />
+                            <Path x:Name="Check" Data="M 5,11 L 9,15 L 17,7"
+                                  Stroke="{DynamicResource Fundo}"
+                                  StrokeThickness="2.3"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  Visibility="Collapsed" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Acento}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource Acento}" />
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Acento}" />
+                                <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ThemeToggle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="86" />
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Track" Background="{DynamicResource Entrada}"
+                                BorderBrush="{DynamicResource Borda}" BorderThickness="1"
+                                CornerRadius="21" Padding="4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition />
+                                    <ColumnDefinition />
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="Knob" Grid.Column="1" Width="34" Height="34"
+                                        HorizontalAlignment="Center" Background="{DynamicResource PainelAlto}"
+                                        BorderBrush="{DynamicResource BordaClara}" BorderThickness="1"
+                                        CornerRadius="17" />
+                                <TextBlock Grid.Column="0" Text="☀" FontSize="18"
+                                           Foreground="{DynamicResource Alerta}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="☾" FontSize="20"
+                                           Foreground="{DynamicResource AcentoClaro}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Knob" Property="Grid.Column" Value="0" />
+                                <Setter TargetName="Knob" Property="Background" Value="{DynamicResource Painel}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Acento}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SearchBox" TargetType="TextBox">
+            <Setter Property="MinHeight" Value="46" />
+            <Setter Property="Padding" Value="15,9" />
+            <Setter Property="Background" Value="{DynamicResource Entrada}" />
+            <Setter Property="Foreground" Value="{DynamicResource Texto}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BordaClara}" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="CaretBrush" Value="{DynamicResource Acento}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="SearchBorder" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7" Padding="{TemplateBinding Padding}">
+                            <ScrollViewer x:Name="PART_ContentHost" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="SearchBorder" Property="BorderBrush" Value="{DynamicResource Acento}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Scrollbar fina, sem setas nas pontas. -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}"
+                               IsDirectionReversed="True">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}"
+                                              Background="Transparent" BorderThickness="0" Opacity="0" />
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb>
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border Background="{DynamicResource BarraRolagem}" CornerRadius="4" />
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}"
+                                              Background="Transparent" BorderThickness="0" Opacity="0" />
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Width" Value="Auto" />
+                    <Setter Property="Height" Value="8" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DataGridHeader" TargetType="DataGridColumnHeader">
+            <Setter Property="Height" Value="50" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Background" Value="{DynamicResource TabelaCabecalho}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextoFraco}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Divisor}" />
+            <Setter Property="BorderThickness" Value="0,0,1,1" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="DataGridCell" TargetType="DataGridCell">
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Foreground" Value="{DynamicResource Texto}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Divisor}" />
+            <Setter Property="BorderThickness" Value="0,0,1,1" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="Transparent" Padding="{TemplateBinding Padding}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DataGridRow" TargetType="DataGridRow">
+            <Setter Property="MinHeight" Value="48" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource Texto}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource LinhaHover}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource LinhaSelecionada}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="StatusPill" TargetType="Border">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="Padding" Value="13,7" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24,20,24,14">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Cabeçalho: identidade + ações de janela -->
-        <DockPanel Grid.Row="0" Margin="0,0,0,14">
-            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                <Border Background="{StaticResource AcentoFundo}" CornerRadius="8"
-                        Width="38" Height="38" VerticalAlignment="Center">
-                    <TextBlock Text="P" FontSize="19" FontWeight="Bold"
-                               Foreground="{StaticResource AcentoClaro}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+        <!-- A. Header -->
+        <Grid Grid.Row="0" Margin="0,0,0,18">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Width="74" Height="74" CornerRadius="16"
+                        Background="{DynamicResource AcentoFundo}"
+                        BorderBrush="{DynamicResource Acento}" BorderThickness="1">
+                    <Grid Margin="10">
+                        <Path Data="M 45,10 A 25,25 0 1 0 45,48" Stroke="{DynamicResource Acento}"
+                              StrokeThickness="5" StrokeStartLineCap="Round" Fill="Transparent" />
+                        <Path Data="M 10,34 L 17,34 L 20,22 L 25,45 L 30,27 L 35,38 L 43,38"
+                              Stroke="{DynamicResource Texto}" StrokeThickness="3.2"
+                              StrokeStartLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" />
+                        <Path Data="M 45,42 L 52,18 L 57,20 L 50,44 Z M 52,18 L 56,12 L 57,20"
+                              Stroke="{DynamicResource Texto}" StrokeThickness="2" Fill="{DynamicResource Texto}" />
+                    </Grid>
                 </Border>
-                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="Click Write" FontSize="18" FontWeight="Bold" />
-                    <TextBlock Text="Transcrição e resumo de ligações — 100% local"
-                               FontSize="11.5" Foreground="{StaticResource TextoFraco}" />
+                <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Click" FontSize="30" FontWeight="Bold" Foreground="{DynamicResource AcentoClaro}" />
+                        <TextBlock Text=" Write" FontSize="30" FontWeight="Bold" Foreground="{DynamicResource Texto}" />
+                    </StackPanel>
+                    <TextBlock Text="Transcrição e resumo de ligações - 100% local"
+                               FontSize="13" Foreground="{DynamicResource TextoFraco}" />
                 </StackPanel>
             </StackPanel>
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right"
-                        VerticalAlignment="Center">
-                <Button Content="Atualizar" Click="BtnAtualizar_Click" />
-                <Button Content="Configurações" Click="BtnConfig_Click" Margin="0" />
-            </StackPanel>
-        </DockPanel>
 
-        <!-- Banner modelos ausentes -->
-        <Border x:Name="BannerModelos" Grid.Row="1" Background="{StaticResource AlertaFundo}"
-                BorderBrush="#92600A" BorderThickness="1" CornerRadius="8"
-                Padding="12,9" Margin="0,0,0,12" Visibility="Collapsed">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="⚠" Foreground="{StaticResource Alerta}" FontSize="14"
-                           Margin="0,0,10,0" VerticalAlignment="Top" />
-                <TextBlock x:Name="TxtBanner" TextWrapping="Wrap" Foreground="{StaticResource AlertaClaro}"
-                           Text="Modelos ausentes — a fila está pausada." />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <ToggleButton x:Name="ThemeToggleButton" Style="{StaticResource ThemeToggle}"
+                              Margin="0,0,12,0" ToolTip="Alternar entre tema claro e escuro"
+                              AutomationProperties.Name="Alternar tema claro ou escuro"
+                              Checked="ThemeToggleButton_Checked" Unchecked="ThemeToggleButton_Unchecked" />
+                <Button Style="{StaticResource ActionButton}" Click="BtnAtualizar_Click" Margin="0,0,10,0"
+                        ToolTip="Atualizar lista de ligações">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource RefreshIcon}" Style="{StaticResource IconPath}" />
+                        <TextBlock Text="Atualizar" Margin="9,0,0,0" VerticalAlignment="Center"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource ActionButton}" Click="BtnConfig_Click"
+                        ToolTip="Abrir configurações">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource SettingsIcon}" Style="{StaticResource IconPath}" />
+                        <TextBlock Text="Configurações" Margin="9,0,0,0" VerticalAlignment="Center"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
+        </Grid>
+
+        <!-- B. Banner de alerta -->
+        <Border x:Name="BannerModelos" Grid.Row="1"
+                Background="{DynamicResource AlertaFundo}"
+                BorderBrush="{DynamicResource Alerta}" BorderThickness="1"
+                CornerRadius="8" Padding="16,12" Margin="0,0,0,16"
+                Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Width="24" Height="24" CornerRadius="12" BorderBrush="{DynamicResource Alerta}"
+                        BorderThickness="1.5" VerticalAlignment="Top">
+                    <TextBlock Text="!" FontWeight="Bold" Foreground="{DynamicResource Alerta}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <TextBlock x:Name="TxtBanner" Grid.Column="1" Margin="12,1,0,0"
+                           TextWrapping="Wrap" Foreground="{DynamicResource AlertaClaro}"
+                           Text="Ligações aguardando envio ao servidor - subindo automaticamente." />
+            </Grid>
         </Border>
 
-        <!-- Barra de ações -->
-        <DockPanel Grid.Row="2" Margin="0,0,0,12">
-            <Button x:Name="BtnGravar" Content="● Iniciar gravação" Click="BtnGravar_Click"
-                    Style="{StaticResource BotaoGravacao}" MinWidth="180" />
-            <Button x:Name="BtnNaoGravar" Content="Não gravar esta chamada" Click="BtnNaoGravar_Click"
-                    IsEnabled="False" />
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Grid VerticalAlignment="Center" Margin="0,0,8,0">
-                    <TextBox x:Name="TxtBusca" Width="270" KeyDown="TxtBusca_KeyDown" />
-                    <TextBlock Text="Buscar número, motivo, produto…"
-                               IsHitTestVisible="False" Margin="11,0,0,0"
-                               VerticalAlignment="Center"
-                               Foreground="{StaticResource TextoApagado}">
+        <!-- C. Barra de acoes -->
+        <Grid Grid.Row="2" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button x:Name="BtnExcluirSelecionadas" Style="{StaticResource ActionButton}"
+                        IsEnabled="False" Margin="0,0,10,0" ToolTip="Excluir as ligações selecionadas"
+                        AutomationProperties.Name="Excluir ligações selecionadas">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource TrashIcon}" Style="{StaticResource IconPath}" />
+                        <TextBlock Text="Excluir selecionadas" Margin="9,0,0,0" VerticalAlignment="Center"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnLimparTudo" Style="{StaticResource DangerButton}"
+                        Margin="0,0,16,0" ToolTip="Limpar todo o histórico"
+                        AutomationProperties.Name="Limpar todo o histórico">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="⌁" FontSize="23" Margin="0,-3,8,0" VerticalAlignment="Center"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        <TextBlock Text="Limpar tudo" VerticalAlignment="Center"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+
+            <Border Grid.Column="1" Height="52" Padding="5" Margin="0,0,16,0"
+                    Background="{DynamicResource Entrada}" BorderBrush="{DynamicResource BordaClara}"
+                    BorderThickness="1" CornerRadius="8" VerticalAlignment="Center">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="92" />
+                        <ColumnDefinition Width="56" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="BtnGravar" Grid.Column="0" Click="BtnGravar_Click"
+                            Background="{DynamicResource RecFundo}" BorderThickness="0" Cursor="Hand"
+                            ToolTip="Iniciar gravação" AutomationProperties.Name="Iniciar gravação">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="RecBorder" Background="{TemplateBinding Background}" CornerRadius="6">
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Ellipse Width="13" Height="13" Fill="{DynamicResource Perigo}" />
+                                        <TextBlock Text="REC" Margin="8,0,0,0" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Texto}" />
+                                    </StackPanel>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="RecBorder" Property="Opacity" Value="0.82" /></Trigger>
+                                    <Trigger Property="IsEnabled" Value="False"><Setter TargetName="RecBorder" Property="Opacity" Value="0.38" /></Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <Button x:Name="BtnNaoGravar" Grid.Column="1" Click="BtnParar_Click" IsEnabled="False"
+                            Margin="5,0,0,0" Background="{DynamicResource StopFundo}" BorderThickness="0"
+                            Cursor="Hand" ToolTip="Parar e enviar para transcrição"
+                            AutomationProperties.Name="Parar e enviar para transcrição">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="StopBorder" Background="{TemplateBinding Background}" CornerRadius="6">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Rectangle Width="13" Height="13" Fill="{DynamicResource TextoFraco}" RadiusX="2" RadiusY="2" />
+                                        <TextBlock Text="STOP" FontSize="9" Margin="0,2,0,0" Foreground="{DynamicResource TextoFraco}" />
+                                    </StackPanel>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="StopBorder" Property="Opacity" Value="0.82" /></Trigger>
+                                    <Trigger Property="IsEnabled" Value="False"><Setter TargetName="StopBorder" Property="Opacity" Value="0.38" /></Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Column="2" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="230" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="0" Margin="0,0,10,0">
+                    <TextBox x:Name="TxtBusca" Style="{StaticResource SearchBox}" KeyDown="TxtBusca_KeyDown" />
+                    <TextBlock Text="Buscar número, motivo, produto..." IsHitTestVisible="False"
+                               Margin="16,0,0,0" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextoApagado}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Visibility" Value="Collapsed" />
@@ -76,71 +464,150 @@
                         </TextBlock.Style>
                     </TextBlock>
                 </Grid>
-                <Button Content="Buscar" Click="BtnBuscar_Click" Margin="0" />
-            </StackPanel>
-        </DockPanel>
+                <Button Grid.Column="1" Style="{StaticResource ActionButton}" Click="BtnBuscar_Click"
+                        Padding="20,9" ToolTip="Executar busca">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource SearchIcon}" Style="{StaticResource IconPath}" Width="18" Height="18" />
+                        <TextBlock Text="Buscar" Margin="8,0,0,0" VerticalAlignment="Center"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Grid>
 
-        <!-- Métricas -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,12">
-            <Border Style="{StaticResource Chip}">
-                <StackPanel Orientation="Horizontal">
-                    <Ellipse Width="7" Height="7" Fill="{StaticResource Acento}"
-                             VerticalAlignment="Center" Margin="0,0,7,0" />
-                    <TextBlock x:Name="TxtTotal" Text="Chamadas: 0" FontSize="12"
-                               Foreground="{StaticResource TextoFraco}" />
-                </StackPanel>
-            </Border>
-            <Border Style="{StaticResource Chip}">
-                <StackPanel Orientation="Horizontal">
-                    <Ellipse Width="7" Height="7" Fill="{StaticResource Sucesso}"
-                             VerticalAlignment="Center" Margin="0,0,7,0" />
-                    <TextBlock x:Name="TxtTempo" Text="Tempo falado: 00:00:00" FontSize="12"
-                               Foreground="{StaticResource TextoFraco}" />
-                </StackPanel>
-            </Border>
-            <Border Style="{StaticResource Chip}">
-                <StackPanel Orientation="Horizontal">
-                    <Ellipse Width="7" Height="7" Fill="{StaticResource Alerta}"
-                             VerticalAlignment="Center" Margin="0,0,7,0" />
-                    <TextBlock x:Name="TxtRevisao" Text="A revisar: 0" FontSize="12"
-                               Foreground="{StaticResource TextoFraco}" />
-                </StackPanel>
-            </Border>
-            <Border Style="{StaticResource Chip}">
-                <StackPanel Orientation="Horizontal">
-                    <Ellipse Width="7" Height="7" Fill="{StaticResource AcentoClaro}"
-                             VerticalAlignment="Center" Margin="0,0,7,0" />
-                    <TextBlock x:Name="TxtFila" Text="Fila: 0" FontSize="12"
-                               Foreground="{StaticResource TextoFraco}" />
-                </StackPanel>
-            </Border>
-        </StackPanel>
-
-        <!-- Histórico -->
-        <Border Grid.Row="4" Style="{StaticResource Card}" Padding="10">
-            <ListView x:Name="ListaChamadas" MouseDoubleClick="Lista_MouseDoubleClick">
-                <ListView.View>
-                    <GridView>
-                        <GridViewColumn Header="DATA" Width="135" DisplayMemberBinding="{Binding Data}" />
-                        <GridViewColumn Header="NÚMERO" Width="130" DisplayMemberBinding="{Binding Numero}" />
-                        <GridViewColumn Header="MOTIVO" Width="210" DisplayMemberBinding="{Binding Motivo}" />
-                        <GridViewColumn Header="PRODUTO" Width="170" DisplayMemberBinding="{Binding Produto}" />
-                        <GridViewColumn Header="STATUS" Width="180" DisplayMemberBinding="{Binding Status}" />
-                        <GridViewColumn Header="DURAÇÃO" Width="90" DisplayMemberBinding="{Binding Duracao}" />
-                        <GridViewColumn Header="" Width="36">
-                            <GridViewColumn.CellTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Revisao}" Foreground="{StaticResource Alerta}"
-                                               FontSize="13" HorizontalAlignment="Center" />
-                                </DataTemplate>
-                            </GridViewColumn.CellTemplate>
-                        </GridViewColumn>
-                    </GridView>
-                </ListView.View>
-            </ListView>
+        <!-- D. Tabela de dados -->
+        <Border Grid.Row="3" Background="{DynamicResource Painel}"
+                BorderBrush="{DynamicResource Borda}" BorderThickness="1"
+                CornerRadius="8" ClipToBounds="True">
+            <DataGrid x:Name="ListaChamadas"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      CanUserReorderColumns="False"
+                      CanUserResizeRows="False"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="None"
+                      SelectionMode="Extended"
+                      SelectionUnit="FullRow"
+                      Background="Transparent"
+                      Foreground="{DynamicResource Texto}"
+                      BorderThickness="0"
+                      RowStyle="{StaticResource DataGridRow}"
+                      CellStyle="{StaticResource DataGridCell}"
+                      ColumnHeaderStyle="{StaticResource DataGridHeader}"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto"
+                      SelectionChanged="ListaChamadas_SelectionChanged"
+                      MouseDoubleClick="Lista_MouseDoubleClick">
+                <DataGrid.Resources>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Texto}" />
+                    </Style>
+                </DataGrid.Resources>
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Width="58">
+                        <DataGridTemplateColumn.HeaderTemplate>
+                            <DataTemplate>
+                                <CheckBox x:Name="ChkSelecionarTudo" Style="{StaticResource CheckBoxLarge}"
+                                          ToolTip="Selecionar todas as ligações visíveis"
+                                          Checked="ChkSelecionarTudo_Checked"
+                                          Unchecked="ChkSelecionarTudo_Unchecked" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.HeaderTemplate>
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox Style="{StaticResource CheckBoxLarge}"
+                                          HorizontalAlignment="Center"
+                                          ToolTip="Selecionar ligação"
+                                          IsChecked="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}, Mode=TwoWay}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="DATA" Binding="{Binding Data}" Width="1.35*" MinWidth="145" />
+                    <DataGridTextColumn Header="NÚMERO" Binding="{Binding Numero}" Width="1.1*" MinWidth="110" />
+                    <DataGridTextColumn Header="MOTIVO" Binding="{Binding Motivo}" Width="2.15*" MinWidth="180" />
+                    <DataGridTextColumn Header="PRODUTO" Binding="{Binding Produto}" Width="1.55*" MinWidth="145" />
+                    <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="1.15*" MinWidth="110" />
+                    <DataGridTextColumn Header="DURAÇÃO" Binding="{Binding Duracao}" Width="1*" MinWidth="100" />
+                    <DataGridTemplateColumn Width="52">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Revisao}" Foreground="{DynamicResource Alerta}"
+                                           FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           ToolTip="Ligação aguardando revisão" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
         </Border>
 
-        <TextBlock x:Name="TxtStatus" Grid.Row="5" Margin="2,10,0,0" FontSize="12"
-                   Foreground="{StaticResource TextoFraco}" Text="Pronto." />
+        <Grid Grid.Row="4" Margin="2,10,2,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="TxtStatus" Text="Pronto." FontSize="12.5"
+                       Foreground="{DynamicResource TextoFraco}" VerticalAlignment="Center" />
+            <TextBlock x:Name="TxtSelecionadas" Grid.Column="1" Text="0 selecionadas" FontSize="12.5"
+                       Foreground="{DynamicResource TextoFraco}" VerticalAlignment="Center" />
+        </Grid>
+
+        <!-- E. Footer -->
+        <Border Grid.Row="5" BorderBrush="{DynamicResource Divisor}" BorderThickness="0,1,0,0"
+                Padding="0,12,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Border Style="{StaticResource StatusPill}" BorderBrush="#4FA7F8">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="7" Height="7" Fill="#4FA7F8" Margin="0,0,7,0" VerticalAlignment="Center" />
+                            <TextBlock x:Name="TxtTotal" Text="Chamadas: 0" FontSize="12.5" Foreground="{DynamicResource TextoFraco}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource StatusPill}" BorderBrush="{DynamicResource Sucesso}">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="7" Height="7" Fill="{DynamicResource Sucesso}" Margin="0,0,7,0" VerticalAlignment="Center" />
+                            <TextBlock x:Name="TxtTempo" Text="Tempo falado: 00:00:00" FontSize="12.5" Foreground="{DynamicResource TextoFraco}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource StatusPill}" BorderBrush="{DynamicResource Alerta}">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="7" Height="7" Fill="{DynamicResource Alerta}" Margin="0,0,7,0" VerticalAlignment="Center" />
+                            <TextBlock x:Name="TxtRevisao" Text="A revisar: 0" FontSize="12.5" Foreground="{DynamicResource TextoFraco}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource StatusPill}" BorderBrush="#C084FC">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="7" Height="7" Fill="#C084FC" Margin="0,0,7,0" VerticalAlignment="Center" />
+                            <TextBlock x:Name="TxtFila" Text="Fila: 0" FontSize="12.5" Foreground="{DynamicResource TextoFraco}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Padding="12,7" Margin="0,0,20,0" CornerRadius="18"
+                            BorderBrush="{DynamicResource Sucesso}" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="ServerStatusDot" Width="9" Height="9"
+                                     Fill="{DynamicResource Sucesso}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock x:Name="TxtServerStatus" Text="Conectado" FontSize="12.5"
+                                       Foreground="{DynamicResource SucessoClaro}" />
+                        </StackPanel>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" ToolTip="Click Digital">
+                        <TextBlock Text="CD" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AcentoClaro}" />
+                        <StackPanel Margin="7,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="Click" FontSize="10" Foreground="{DynamicResource TextoFraco}" />
+                            <TextBlock Text="Digital" FontSize="10" Foreground="{DynamicResource TextoFraco}" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </Window>
