@@ -1,15 +1,20 @@
 namespace Piloto.Core.Models;
 
-/// <summary>Tipo de campo objetivo extraído por regras.</summary>
+/// <summary>
+/// Tipo de campo objetivo exibido. São os cinco dados que o atendente copia para o
+/// cadastro: ticket e telefone vêm da extensão; CPF/CNPJ, nome e e-mail vêm da
+/// transcrição do servidor (ou do cadastro, quando ele venceu a transcrição lá).
+/// <para>Data, Valor e Protocolo saíram: o servidor não extrai nenhum dos três, então
+/// só ocupavam a tela com "Não identificado".</para>
+/// </summary>
 public enum FieldType
 {
+    Ticket,
     Telefone,
     Cpf,
     Cnpj,
+    Nome,
     Email,
-    Data,
-    Valor,
-    Protocolo,
 }
 
 /// <summary>De onde veio o valor. Determina a confiança e o que o atendente pode copiar
@@ -55,28 +60,31 @@ public sealed class ExtractedValue
 /// </summary>
 public sealed class ObjectiveFields
 {
+    /// <summary>Número do ticket, lido do Zendesk pela extensão.</summary>
+    public List<ExtractedValue> Tickets { get; init; } = new();
+
     public List<ExtractedValue> Telefones { get; init; } = new();
 
     /// <summary>Documentos (CPF e CNPJ) — mantém o nome "Cpfs" pela compatibilidade do
     /// JSON persistido; o <see cref="ExtractedValue.Tipo"/> distingue os dois.</summary>
     public List<ExtractedValue> Cpfs { get; init; } = new();
+
+    /// <summary>Nome do solicitante, ouvido na ligação ou vindo do cadastro.</summary>
+    public List<ExtractedValue> Nomes { get; init; } = new();
+
     public List<ExtractedValue> Emails { get; init; } = new();
-    public List<ExtractedValue> Datas { get; init; } = new();
-    public List<ExtractedValue> Valores { get; init; } = new();
-    public List<ExtractedValue> Protocolos { get; init; } = new();
 
     public IEnumerable<ExtractedValue> Todos()
-        => Telefones.Concat(Cpfs).Concat(Emails).Concat(Datas).Concat(Valores).Concat(Protocolos);
+        => Tickets.Concat(Telefones).Concat(Cpfs).Concat(Nomes).Concat(Emails);
 
     /// <summary>Todas as listas, na ordem em que aparecem na tela e nas exportações.</summary>
     public IEnumerable<(string Titulo, List<ExtractedValue> Valores)> PorCategoria()
     {
+        yield return ("Ticket", Tickets);
         yield return ("Telefones", Telefones);
         yield return ("CPF/CNPJ", Cpfs);
+        yield return ("Nome", Nomes);
         yield return ("E-mails", Emails);
-        yield return ("Datas", Datas);
-        yield return ("Valores", Valores);
-        yield return ("Protocolos", Protocolos);
     }
 
     /// <summary>
@@ -116,9 +124,10 @@ public sealed class ObjectiveFields
     /// "(11) 91234-5678" e "11912345678" são o mesmo telefone; e-mail ignora caixa.</summary>
     private static string Chave(ExtractedValue v) => v.Tipo switch
     {
-        FieldType.Telefone or FieldType.Cpf or FieldType.Cnpj or FieldType.Protocolo
+        // Ticket fica de fora: o identificador do Zendesk nem sempre é só dígito.
+        FieldType.Telefone or FieldType.Cpf or FieldType.Cnpj
             => new string(v.Valor.Where(char.IsDigit).ToArray()),
-        FieldType.Email => v.Valor.Trim().ToLowerInvariant(),
+        FieldType.Email or FieldType.Nome => v.Valor.Trim().ToLowerInvariant(),
         _ => v.Valor.Trim(),
     };
 

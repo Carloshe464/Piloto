@@ -306,6 +306,23 @@ public sealed class SqliteCallRepository : ICallRepository, IDisposable
         }
     }
 
+    public CallRecord? ObterPorUuid(string uuid)
+    {
+        if (string.IsNullOrWhiteSpace(uuid)) return null;
+
+        lock (_lock)
+        {
+            using var cmd = Conn.CreateCommand();
+            // O mais recente primeiro: bancos anteriores à 1.1 podem ter duplicado o mesmo
+            // uuid (o reprocessamento inseria em vez de atualizar), e o registro certo é
+            // sempre o último gravado.
+            cmd.CommandText = SelectCalls + " WHERE uuid=$uuid ORDER BY id DESC LIMIT 1;";
+            cmd.Parameters.AddWithValue("$uuid", uuid);
+            using var r = cmd.ExecuteReader();
+            return r.Read() ? LerCallRecord(r) : null;
+        }
+    }
+
     public IReadOnlyList<CallRecord> ListarRegistros(int limite = 200, int offset = 0)
     {
         lock (_lock)

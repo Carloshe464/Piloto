@@ -25,7 +25,7 @@ public static class MapeadorResultado
             Uuid = origem.CallId,
             Metadata = MesclarMetadata(metadataLocal, origem),
             Transcript = ParaTranscript(origem.Transcricao),
-            Campos = ParaCampos(origem.Campos),
+            Campos = ParaCampos(origem.Campos, metadataLocal, origem),
             Resumo = ParaResumo(origem.Resumo),
             Duracao = TimeSpan.FromMilliseconds(origem.Transcricao.DuracaoMs > 0
                 ? origem.Transcricao.DuracaoMs
@@ -81,7 +81,8 @@ public static class MapeadorResultado
             Confianca = t.Confianca,
         }));
 
-    private static ObjectiveFields ParaCampos(CamposServidor origem)
+    private static ObjectiveFields ParaCampos(
+        CamposServidor origem, CallMetadata local, ResultadoServidor resultado)
     {
         var campos = ObjectiveFields.Vazio();
 
@@ -90,10 +91,39 @@ public static class MapeadorResultado
         Adicionar(campos.Cpfs, origem.Cpf, FieldType.Cpf);
         Adicionar(campos.Cpfs, origem.Cnpj, FieldType.Cnpj);
         Adicionar(campos.Emails, origem.Email, FieldType.Email);
+        Adicionar(campos.Nomes, origem.Nome, FieldType.Nome);
         Adicionar(campos.Telefones, origem.Telefone, FieldType.Telefone);
+
+        // O número do discador e o telefone do cadastro nunca chegam como campo do
+        // servidor: ele só devolve o que ouviu. Sem isto, uma ligação em que ninguém
+        // disse o telefone em voz alta sai com "Telefones: Não identificado" mesmo com
+        // o número na tela do Zendesk.
+        AdicionarDoCadastro(campos.Telefones, local.Numero ?? resultado.Metadados.Telefone, FieldType.Telefone);
+        AdicionarDoCadastro(campos.Telefones, local.TelefoneCliente, FieldType.Telefone);
+
+        // Ticket e nome do cadastro vêm da extensão, não da ligação: é o dado que o
+        // atendente confere no Zendesk e o que amarra a gravação ao atendimento.
+        AdicionarDoCadastro(campos.Tickets, local.TicketId ?? resultado.Metadados.Ticket, FieldType.Ticket);
+        AdicionarDoCadastro(campos.Nomes, local.NomeCliente, FieldType.Nome);
+        AdicionarDoCadastro(campos.Emails, local.EmailCliente, FieldType.Email);
 
         campos.Ordenar();
         return campos;
+    }
+
+    private static void AdicionarDoCadastro(List<ExtractedValue> destino, string? valor, FieldType tipo)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+            return;
+
+        ObjectiveFields.Mesclar(destino, new ExtractedValue
+        {
+            Tipo = tipo,
+            Valor = valor.Trim(),
+            TrechoOrigem = "cadastro Zendesk / discador",
+            Confianca = 1.0,
+            Origem = FieldSource.Extensao,
+        });
     }
 
     private static void Adicionar(List<ExtractedValue> destino, CampoServidor? campo, FieldType tipo)
@@ -114,23 +144,22 @@ public static class MapeadorResultado
                 : FieldSource.Regra,
         });
 
-        // Quando o servidor não conseguiu fechar o documento, os candidatos que passariam
-        // no dígito verificador entram como opções de menor confiança — o atendente
-        // escolhe em vez de redigitar.
-        if (!campo.Parcial)
+        // Quando o servidor não conseguiu fechar o documento, ele devolve os valores que
+        // passariam no dígito verificador. Uma sugestão é ajuda; quatro são ruído: com o
+        // documento ditado uma vez só, o reparo por edição produz meia dúzia de CNPJs
+        // igualmente "válidos" e nenhum deles é conferível pelo atendente. Nesse caso
+        // fica só o que foi ouvido, marcado como PARCIAL — o valor dito na ligação.
+        if (!campo.Parcial || campo.Candidatos.Count != 1)
             return;
 
-        foreach (var candidato in campo.Candidatos.Take(4))
+        ObjectiveFields.Mesclar(destino, new ExtractedValue
         {
-            ObjectiveFields.Mesclar(destino, new ExtractedValue
-            {
-                Tipo = tipo,
-                Valor = candidato,
-                TrechoOrigem = "sugestão — confira no áudio",
-                Confianca = Math.Max(0.05, campo.Confianca - 0.05),
-                Origem = FieldSource.Regra,
-            });
-        }
+            Tipo = tipo,
+            Valor = campo.Candidatos[0],
+            TrechoOrigem = "sugestão — confira no áudio",
+            Confianca = Math.Max(0.05, campo.Confianca - 0.05),
+            Origem = FieldSource.Regra,
+        });
     }
 
     /// <summary>

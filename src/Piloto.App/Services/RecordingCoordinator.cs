@@ -57,6 +57,7 @@ public sealed class RecordingCoordinator
         _recorder.EstadoGravacaoMudou += (_, gravando) => EstadoGravacaoMudou?.Invoke(this, gravando);
         _recorder.AvisoCaptura += (_, msg) => AvisoCaptura?.Invoke(this, msg);
         _uploader.EnvioAdiado += (_, pasta) => EnvioAdiado?.Invoke(this, pasta);
+        _uploader.PendenteSubiu += (_, e) => AcompanharPendente(e);
         _bridge.MetadataAtualizada += (_, meta) => AtualizarMetadata(meta);
         _bridge.ChamadaIniciada += (_, meta) => AtualizarMetadata(meta);
         _bridge.ChamadaEncerrada += (_, meta) => AtualizarMetadata(meta);
@@ -64,6 +65,31 @@ public sealed class RecordingCoordinator
         _bridge.AudioIniciado += (_, taxa) => IniciarSessaoExtensao(taxa);
         _bridge.AudioChunkRecebido += (_, e) => _extensao.ReceberChunk(e.Canal, e.Dados);
         _bridge.AudioEncerrado += (_, _) => EncerrarSessaoExtensao();
+    }
+
+    /// <summary>
+    /// Uma gravação retida em disco subiu sozinha (rede voltou, ou o app reabriu). Daqui
+    /// para frente o caminho é o mesmo do envio direto: passa a acompanhar o resultado e
+    /// avisa a tela.
+    /// <para>Sem isto, a ligação subia para o servidor e o resultado nunca era buscado —
+    /// o atendente via a gravação sair da fila e nunca a via aparecer na lista.</para>
+    /// </summary>
+    private void AcompanharPendente(PendenteEnviada e)
+    {
+        try
+        {
+            _sincronizador.Acompanhar(
+                e.Resposta.CallId, e.Metadata, e.AudioAtendente, e.AudioCliente);
+            _log.LogInformation("Ligação {CallId} enviada ao servidor — fila local (reenvio automático)",
+                                e.Resposta.CallId);
+            ChamadaEnviada?.Invoke(this, e.Resposta);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Ligação {CallId} subiu mas não pôde ser acompanhada",
+                          e.Resposta.CallId);
+            AvisoCaptura?.Invoke(this, $"Ligação enviada, mas o resultado não está sendo acompanhado: {ex.Message}");
+        }
     }
 
     private void IniciarSessaoExtensao(int taxa)
@@ -155,6 +181,11 @@ public sealed class RecordingCoordinator
                 EmailCliente = meta.EmailCliente ?? _metadataCorrente.EmailCliente,
                 TelefoneCliente = meta.TelefoneCliente ?? _metadataCorrente.TelefoneCliente,
                 NomeCliente = meta.NomeCliente ?? _metadataCorrente.NomeCliente,
+                // A sessão da extensão começa no evento call_started. Não perder o
+                // carimbo ao chegar um metadata parcial depois é essencial para o
+                // tempo da ligação refletir o começo real do softphone.
+                IniciadaEm = meta.IniciadaEm ?? _metadataCorrente.IniciadaEm,
+                EncerradaEm = meta.EncerradaEm ?? _metadataCorrente.EncerradaEm,
             };
         }
         MetadataMudou?.Invoke(this, EventArgs.Empty);
@@ -226,5 +257,7 @@ public sealed class RecordingCoordinator
         EmailCliente = origem.EmailCliente,
         TelefoneCliente = origem.TelefoneCliente,
         NomeCliente = origem.NomeCliente,
+        IniciadaEm = origem.IniciadaEm,
+        EncerradaEm = origem.EncerradaEm,
     };
 }

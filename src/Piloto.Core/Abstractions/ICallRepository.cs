@@ -25,6 +25,13 @@ public interface ICallRepository
     // ----- Registros -----
     long SalvarRegistro(CallRecord registro);
     CallRecord? ObterRegistro(long id);
+
+    /// <summary>
+    /// Registro pelo identificador do servidor. É como o reprocessamento encontra a
+    /// ligação que já está no banco: sem isto, o resultado que volta do servidor entraria
+    /// como uma segunda ligação idêntica na lista.
+    /// </summary>
+    CallRecord? ObterPorUuid(string uuid);
     IReadOnlyList<CallRecord> ListarRegistros(int limite = 200, int offset = 0);
 
     /// <summary>

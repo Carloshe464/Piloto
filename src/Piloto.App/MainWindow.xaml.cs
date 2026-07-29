@@ -141,7 +141,7 @@ public partial class MainWindow : Window
         var registro = _repo.ObterRegistro(linha.Id);
         if (registro is null) return;
 
-        var win = new DetailWindow(registro, _exporter, _uploader) { Owner = this };
+        var win = new DetailWindow(registro, _exporter, _uploader, _sincronizador) { Owner = this };
         win.ShowDialog();
         Recarregar(); // um reprocessamento pode ter sido enfileirado no detalhe
     }

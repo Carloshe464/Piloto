@@ -14,13 +14,16 @@ public partial class DetailWindow : Window
     private readonly CallRecord _registro;
     private readonly IExporter _exporter;
     private readonly Core.Services.ClickWriteUploader _uploader;
+    private readonly Core.Services.SincronizadorServidor _sincronizador;
 
     public DetailWindow(CallRecord registro, IExporter exporter,
-                        Core.Services.ClickWriteUploader uploader)
+                        Core.Services.ClickWriteUploader uploader,
+                        Core.Services.SincronizadorServidor sincronizador)
     {
         _registro = registro;
         _exporter = exporter;
         _uploader = uploader;
+        _sincronizador = sincronizador;
         InitializeComponent();
         Preencher();
     }
@@ -196,6 +199,14 @@ public partial class DetailWindow : Window
         {
             if (await _uploader.ReprocessarAsync(_registro.Uuid))
             {
+                // Sem voltar a acompanhar, o servidor reprocessava e o app nunca ficava
+                // sabendo: nada no log, nada na tela, e o registro continuava com o
+                // resultado antigo. O acompanhamento vive em disco, então sobrevive ao
+                // fechamento da janela e do próprio app.
+                _sincronizador.Acompanhar(
+                    _registro.Uuid, _registro.Metadata,
+                    _registro.CaminhoAudioAtendente, _registro.CaminhoAudioCliente);
+
                 MessageBox.Show("Reprocessamento pedido — o resultado chega em segundo plano.",
                     "Click Write", MessageBoxButton.OK, MessageBoxImage.Information);
                 Close();

@@ -70,20 +70,7 @@ public partial class App : Application
             var sincronizador = _provider.GetRequiredService<SincronizadorServidor>();
 
             var retidas = uploader.PendentesEmDisco();
-            if (retidas > 0)
-            {
-                _log.LogInformation("{Retidas} ligação(ões) retida(s) em disco — reenviando", retidas);
-                _ = Task.Run(() => uploader.DrenarPendentesAsync());
-            }
-
-            // Máquina que passou a noite desligada: o servidor já terminou de processar,
-            // e o resultado precisa ser buscado agora, sem esperar o primeiro ciclo.
             var aguardando = sincronizador.AguardandoResultado();
-            if (aguardando > 0)
-            {
-                _log.LogInformation("{Aguardando} ligação(ões) aguardando resultado do servidor", aguardando);
-                _ = Task.Run(() => sincronizador.VerificarAsync());
-            }
 
             _main = _provider.GetRequiredService<MainWindow>();
 
@@ -132,6 +119,24 @@ public partial class App : Application
                 _tray!.Notificar("Click Write — falha no servidor", erro);
                 _main!.MostrarStatus($"O servidor não conseguiu processar a ligação: {erro}");
             });
+
+            // Só depois de a tela e as notificações estarem ligadas: o reenvio dispara
+            // ChamadaEnviada, e antes desta linha esse aviso se perdia — o atendente não
+            // via nada acontecer com a ligação que tinha ficado para trás.
+            if (retidas > 0)
+            {
+                _log.LogInformation("{Retidas} ligação(ões) retida(s) em disco — reenviando", retidas);
+                _main.MostrarStatus($"{retidas} gravação(ões) guardada(s) — reenviando ao servidor…");
+                _ = Task.Run(() => uploader.DrenarPendentesAsync());
+            }
+
+            // Máquina que passou a noite desligada: o servidor já terminou de processar,
+            // e o resultado precisa ser buscado agora, sem esperar o primeiro ciclo.
+            if (aguardando > 0)
+            {
+                _log.LogInformation("{Aguardando} ligação(ões) aguardando resultado do servidor", aguardando);
+                _ = Task.Run(() => sincronizador.VerificarAsync());
+            }
 
             try { bridge.Iniciar(); }
             catch (Exception ex) { _log.LogError(ex, "Falha ao iniciar o bridge na porta {Porta}", _config.Settings.Bridge.Porta); }

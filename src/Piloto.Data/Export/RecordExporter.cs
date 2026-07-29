@@ -77,14 +77,14 @@ public sealed class RecordExporter : IExporter
 
         sb.AppendLine();
         sb.AppendLine("--- CAMPOS OBJETIVOS ---");
+        // Ticket, telefone, CPF/CNPJ, nome e e-mail — na mesma ordem da tela. Ticket e
+        // CPF/CNPJ saem SEM máscara mesmo com PII ligado: são o que o atendente copia
+        // para o cadastro e para o Zendesk; mascarados, não serviriam para nada.
+        AppendCampos(sb, "Ticket", r.Campos.Tickets, mascarar: false);
         AppendCampos(sb, "Telefones", r.Campos.Telefones, mascarar);
-        // CPF/CNPJ sai SEM máscara mesmo com PII ligado: é o dado que o atendente precisa
-        // copiar para o cadastro — mascarado, o campo não serve para nada.
         AppendCampos(sb, "CPF/CNPJ", r.Campos.Cpfs, mascarar: false);
+        AppendCampos(sb, "Nome", r.Campos.Nomes, mascarar);
         AppendCampos(sb, "E-mails", r.Campos.Emails, mascarar);
-        AppendCampos(sb, "Datas", r.Campos.Datas, mascarar);
-        AppendCampos(sb, "Valores", r.Campos.Valores, mascarar);
-        AppendCampos(sb, "Protocolos", r.Campos.Protocolos, mascarar);
 
         sb.AppendLine();
         sb.AppendLine("--- DIÁLOGO ---");
@@ -144,12 +144,11 @@ public sealed class RecordExporter : IExporter
             },
             Campos = new
             {
+                Tickets = MapearCampos(r.Campos.Tickets, mascarar: false),
                 Telefones = MapearCampos(r.Campos.Telefones, mascarar),
                 Cpfs = MapearCampos(r.Campos.Cpfs, mascarar: false),
+                Nomes = MapearCampos(r.Campos.Nomes, mascarar),
                 Emails = MapearCampos(r.Campos.Emails, mascarar),
-                Datas = MapearCampos(r.Campos.Datas, mascarar),
-                Valores = MapearCampos(r.Campos.Valores, mascarar),
-                Protocolos = MapearCampos(r.Campos.Protocolos, mascarar),
             },
             Dialogo = Aplicar(r.Transcript.TextoRotulado(), mascarar),
         });

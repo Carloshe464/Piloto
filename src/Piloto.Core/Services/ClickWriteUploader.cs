@@ -38,6 +38,13 @@ public sealed class ClickWriteUploader : IDisposable
     /// <summary>Ligação aceita pelo servidor. O argumento é o call_id.</summary>
     public event EventHandler<RespostaEnvio>? LigacaoAceita;
 
+    /// <summary>
+    /// Uma ligação que estava retida em disco subiu sozinha. Traz o contexto local
+    /// (metadados do Zendesk e caminhos dos áudios) porque quem ouve precisa passar a
+    /// acompanhar o resultado — sem isso a ligação sobe e o resultado nunca volta.
+    /// </summary>
+    public event EventHandler<PendenteEnviada>? PendenteSubiu;
+
     /// <summary>Servidor inacessível: a ligação ficou retida em disco.</summary>
     public event EventHandler<string>? EnvioAdiado;
 
@@ -53,8 +60,14 @@ public sealed class ClickWriteUploader : IDisposable
             _http.DefaultRequestHeaders.Add("X-Token", _cfg.Token);
 
         var intervalo = TimeSpan.FromSeconds(_cfg.IntervaloReenvioSegundos);
-        _reenvio = new Timer(async _ => await DrenarPendentesAsync().ConfigureAwait(false),
-                             null, intervalo, intervalo);
+        // O callback do Timer é void: qualquer exceção que escapasse daqui viraria
+        // exceção não observada numa thread do pool e derrubaria o processo — e era assim
+        // que o reenvio automático parava de funcionar sem deixar rastro na tela.
+        _reenvio = new Timer(async _ =>
+        {
+            try { await DrenarPendentesAsync().ConfigureAwait(false); }
+            catch (Exception e) { _log.LogError(e, "Falha no ciclo de reenvio automático"); }
+        }, null, intervalo, intervalo);
     }
 
     /// <summary>Envia a captura. Se o servidor não responder, retém e devolve null.</summary>
@@ -150,7 +163,43 @@ public sealed class ClickWriteUploader : IDisposable
         File.Copy(captura.CaminhoCliente, Path.Combine(pasta, "cliente.wav"), overwrite: true);
         File.WriteAllText(Path.Combine(pasta, "metadata.json"),
                           JsonSerializer.Serialize(metadados, Json), Encoding.UTF8);
+
+        // `metadata.json` é o contrato do servidor e não carrega o que a tela precisa
+        // (ticket, nome, e-mail do cadastro, caminho dos áudios originais). Sem este
+        // segundo arquivo, a ligação que sobe pela fila volta do servidor sem contexto
+        // local — e era por isso que o envio automático "não chegava" na tela.
+        File.WriteAllText(
+            Path.Combine(pasta, "contexto.json"),
+            JsonSerializer.Serialize(new ContextoPendente
+            {
+                Metadata = captura.Metadata,
+                AudioAtendente = captura.CaminhoAtendente,
+                AudioCliente = captura.CaminhoCliente,
+            }, Json),
+            Encoding.UTF8);
+
         return pasta;
+    }
+
+    /// <summary>Lê o contexto local da pendente. Ausente ou ilegível não impede o envio:
+    /// a ligação sobe com o que o servidor precisa e a tela usa o que o servidor devolver.</summary>
+    private ContextoPendente LerContexto(string pasta)
+    {
+        var arquivo = Path.Combine(pasta, "contexto.json");
+        if (!File.Exists(arquivo))
+            return new ContextoPendente();
+
+        try
+        {
+            return JsonSerializer.Deserialize<ContextoPendente>(File.ReadAllText(arquivo), Json)
+                   ?? new ContextoPendente();
+        }
+        catch (JsonException e)
+        {
+            _log.LogWarning(e, "Contexto ilegível em {Pasta} — enviando sem metadados locais",
+                            Path.GetFileName(pasta));
+            return new ContextoPendente();
+        }
     }
 
     /// <summary>Sobe o que ficou para trás. Chamado por timer e na abertura do app.</summary>
@@ -183,11 +232,17 @@ public sealed class ClickWriteUploader : IDisposable
                 {
                     var metadados = JsonSerializer.Deserialize<MetadadosLigacao>(
                         File.ReadAllText(meta), Json)!;
+                    var contexto = LerContexto(pasta);
                     var resposta = await PostarAsync(agente, cliente, metadados, ct).ConfigureAwait(false);
 
                     Directory.Delete(pasta, recursive: true);
-                    _log.LogInformation("Pendente enviada: {CallId}", resposta.CallId);
+                    _log.LogInformation("Pendente enviada: {CallId} (retida em {Pasta})",
+                                        resposta.CallId, Path.GetFileName(pasta));
                     LigacaoAceita?.Invoke(this, resposta);
+                    // Depois de LigacaoAceita: quem ouve isto passa a acompanhar o
+                    // resultado, e o acompanhamento precisa do call_id já anunciado.
+                    PendenteSubiu?.Invoke(this, new PendenteEnviada(
+                        resposta, contexto.Metadata, contexto.AudioAtendente, contexto.AudioCliente));
                 }
                 catch (EnvioRecusadoException e)
                 {
@@ -199,6 +254,14 @@ public sealed class ClickWriteUploader : IDisposable
                 {
                     File.WriteAllText(contador, (tentativas + 1).ToString());
                     break;  // servidor ainda fora: não insiste nas outras agora
+                }
+                catch (Exception e)
+                {
+                    // Pasta corrompida (metadata ilegível, WAV truncado, arquivo em uso).
+                    // Antes escapava daqui, matava o ciclo e parava o reenvio de TODAS as
+                    // outras. Conta a tentativa e segue para a próxima.
+                    File.WriteAllText(contador, (tentativas + 1).ToString());
+                    _log.LogError(e, "Falha ao reenviar a pendente {Pasta}", Path.GetFileName(pasta));
                 }
             }
         }
@@ -241,6 +304,13 @@ public sealed class ClickWriteUploader : IDisposable
             .PostAsync($"{_cfg.Url.TrimEnd('/')}/v1/calls/{Uri.EscapeDataString(callId)}/reprocess",
                        content: null, ct)
             .ConfigureAwait(false);
+
+        if (resposta.IsSuccessStatusCode)
+            _log.LogInformation("Reprocessamento pedido para {CallId}", callId);
+        else
+            _log.LogWarning("Servidor recusou o reprocessamento de {CallId}: HTTP {Status}",
+                            callId, (int)resposta.StatusCode);
+
         return resposta.IsSuccessStatusCode;
     }
 
@@ -266,6 +336,25 @@ public sealed class ClickWriteUploader : IDisposable
 
 /// <summary>Recusa definitiva do servidor. Reenviar o mesmo conteúdo não adianta.</summary>
 public sealed class EnvioRecusadoException(string mensagem) : Exception(mensagem);
+
+/// <summary>Uma pendente que subiu sozinha, com o contexto local que a tela precisa.</summary>
+public sealed record PendenteEnviada(
+    RespostaEnvio Resposta,
+    CallMetadata Metadata,
+    string? AudioAtendente,
+    string? AudioCliente);
+
+/// <summary>
+/// O que fica guardado ao lado dos WAVs retidos além do <c>metadata.json</c> do servidor:
+/// os metadados do Zendesk e os caminhos dos áudios originais. É o que permite gravar o
+/// registro completo quando o resultado voltar, mesmo que o app tenha sido reaberto.
+/// </summary>
+internal sealed record ContextoPendente
+{
+    public CallMetadata Metadata { get; init; } = CallMetadata.Vazio();
+    public string? AudioAtendente { get; init; }
+    public string? AudioCliente { get; init; }
+}
 
 public sealed record MetadadosLigacao
 {

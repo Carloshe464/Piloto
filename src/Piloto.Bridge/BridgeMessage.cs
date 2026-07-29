@@ -36,6 +36,14 @@ public sealed class BridgeMessage
     [JsonPropertyName("nomeCliente")]
     public string? NomeCliente { get; set; }
 
+    /// <summary>Instante em que o softphone abriu a chamada, carimbado no navegador.</summary>
+    [JsonPropertyName("iniciadaEm")]
+    public DateTimeOffset? IniciadaEm { get; set; }
+
+    /// <summary>Instante em que o softphone encerrou a chamada, carimbado no navegador.</summary>
+    [JsonPropertyName("encerradaEm")]
+    public DateTimeOffset? EncerradaEm { get; set; }
+
     // ----- Áudio capturado pela extensão (hook WebRTC no softphone) -----
 
     /// <summary>"atendente" ou "cliente".</summary>
@@ -59,6 +67,8 @@ public sealed class BridgeMessage
         EmailCliente = EmailCliente,
         TelefoneCliente = TelefoneCliente,
         NomeCliente = NomeCliente,
+        IniciadaEm = IniciadaEm,
+        EncerradaEm = EncerradaEm,
     };
 }
 

@@ -168,11 +168,13 @@ public sealed class ZendeskBridgeServer : IAsyncDisposable
         switch (msg.Tipo)
         {
             case BridgeMessageTypes.ChamadaIniciada:
-                metadata.IniciadaEm = DateTimeOffset.Now;
+                // A extensão envia a hora do softphone. Só usa a hora local como
+                // fallback para extensões antigas, que ainda não têm o campo.
+                metadata.IniciadaEm ??= DateTimeOffset.Now;
                 ChamadaIniciada?.Invoke(this, metadata);
                 break;
             case BridgeMessageTypes.ChamadaEncerrada:
-                metadata.EncerradaEm = DateTimeOffset.Now;
+                metadata.EncerradaEm ??= DateTimeOffset.Now;
                 ChamadaEncerrada?.Invoke(this, metadata);
                 break;
             case BridgeMessageTypes.AudioInicio:

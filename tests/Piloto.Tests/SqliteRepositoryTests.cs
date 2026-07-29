@@ -75,6 +75,22 @@ public class SqliteRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void ObterPorUuidEncontraORegistroDoReprocessamento()
+    {
+        // O resultado do reprocessamento volta com o mesmo call_id. É por este caminho
+        // que ele atualiza a ligação existente em vez de duplicá-la na lista.
+        var registro = Registro("cliente quer segunda via");
+        registro.Uuid = "0b2495ccc52d4a44bae8a4a863b67fc4";
+        var id = _repo.SalvarRegistro(registro);
+
+        var achado = _repo.ObterPorUuid("0b2495ccc52d4a44bae8a4a863b67fc4");
+
+        Assert.NotNull(achado);
+        Assert.Equal(id, achado!.Id);
+        Assert.Null(_repo.ObterPorUuid("nao-existe"));
+    }
+
+    [Fact]
     public void BuscaFtsEncontraPorTermo()
     {
         _repo.SalvarRegistro(Registro("cliente quer segunda via do boleto"));

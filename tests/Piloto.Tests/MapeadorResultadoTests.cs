@@ -132,12 +132,40 @@ public class MapeadorResultadoTests
     }
 
     [Fact]
-    public void Nome_vai_para_o_cabecalho_e_nao_para_a_lista_de_campos()
+    public void Nome_vai_para_o_cabecalho_e_tambem_para_a_lista_de_campos()
     {
         var registro = Mapear();
 
+        // O nome é um dos cinco campos objetivos: o atendente copia daí para o cadastro,
+        // sem ter que reler o cabeçalho.
         Assert.Equal("Carlos Henrique", registro.Metadata.NomeCliente);
-        Assert.DoesNotContain(registro.Campos.Todos(), v => v.Valor == "Carlos Henrique");
+        Assert.Contains(registro.Campos.Nomes, v => v.Valor == "Carlos Henrique");
+    }
+
+    [Fact]
+    public void Ticket_da_extensao_entra_como_campo_objetivo()
+    {
+        // O ticket não é ouvido na ligação: vem do Zendesk pela extensão. Sem ele na
+        // lista, o atendente não tem como amarrar a gravação ao atendimento.
+        var registro = Mapear(local: new CallMetadata { TicketId = "12345" });
+
+        var ticket = Assert.Single(registro.Campos.Tickets);
+        Assert.Equal("12345", ticket.Valor);
+        Assert.True(ticket.EhDoCadastro);
+    }
+
+    [Fact]
+    public void Ticket_dos_metadados_vale_quando_a_extensao_nao_leu()
+    {
+        Assert.Equal("99887", Assert.Single(Mapear().Campos.Tickets).Valor);
+    }
+
+    [Fact]
+    public void Campos_objetivos_sao_apenas_os_cinco_da_tela()
+    {
+        var titulos = Mapear().Campos.PorCategoria().Select(c => c.Titulo);
+
+        Assert.Equal(new[] { "Ticket", "Telefones", "CPF/CNPJ", "Nome", "E-mails" }, titulos);
     }
 
     [Fact]
@@ -145,7 +173,11 @@ public class MapeadorResultadoTests
     {
         var registro = Mapear();
 
-        Assert.Empty(registro.Campos.Telefones);
+        // O servidor não ouviu telefone (campos.telefone = null), mas o número do discador
+        // está nos metadados — é ele que o atendente precisa ver. O que não pode aparecer
+        // é campo ouvido inventado: o CNPJ ausente continua ausente.
+        Assert.Equal(new[] { "11987654321" }, registro.Campos.Telefones.Select(v => v.Valor));
+        Assert.All(registro.Campos.Telefones, v => Assert.True(v.EhDoCadastro));
         Assert.DoesNotContain(registro.Campos.Cpfs, v => v.Tipo == FieldType.Cnpj);
     }
 

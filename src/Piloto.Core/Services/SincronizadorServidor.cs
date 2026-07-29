@@ -59,8 +59,13 @@ public sealed class SincronizadorServidor : IDisposable
         // Intervalo curto: uma ligação de 5 minutos fica pronta em cerca de 2 no servidor,
         // e o atendente já está esperando o registro aparecer na lista.
         var intervalo = TimeSpan.FromSeconds(Math.Max(3, settings.Servidor.IntervaloConsultaSegundos));
-        _timer = new Timer(async _ => await VerificarAsync().ConfigureAwait(false),
-                           null, intervalo, intervalo);
+        // Exceção escapando do callback do Timer (async void) derruba o processo e o
+        // acompanhamento morre em silêncio. Fica contida e registrada.
+        _timer = new Timer(async _ =>
+        {
+            try { await VerificarAsync().ConfigureAwait(false); }
+            catch (Exception e) { _log.LogError(e, "Falha no ciclo de consulta ao servidor"); }
+        }, null, intervalo, intervalo);
     }
 
     /// <summary>Passa a acompanhar uma ligação aceita pelo servidor.</summary>
@@ -160,10 +165,30 @@ public sealed class SincronizadorServidor : IDisposable
         var registro = MapeadorResultado.ParaRegistro(
             resultado, espera.Metadata, espera.AudioAtendente, espera.AudioCliente);
 
-        registro.Id = _repo.SalvarRegistro(registro);
-        _log.LogInformation(
-            "Registro {Id} gravado a partir do servidor ({Turnos} turnos, revisão={Revisao})",
-            registro.Id, registro.Transcript.Segmentos.Count, registro.PrecisaRevisao);
+        // Reprocessamento devolve o MESMO call_id: o registro já existe e é atualizado no
+        // lugar. Inserir de novo criaria a mesma ligação duas vezes na lista — e o
+        // atendente ficaria sem saber qual das duas é a versão nova.
+        var existente = _repo.ObterPorUuid(registro.Uuid);
+        if (existente is not null)
+        {
+            registro.Id = existente.Id;
+            registro.CriadoEm = existente.CriadoEm;
+            // O áudio da ligação original continua valendo: o reprocesso não reenvia áudio.
+            registro.CaminhoAudioAtendente ??= existente.CaminhoAudioAtendente;
+            registro.CaminhoAudioCliente ??= existente.CaminhoAudioCliente;
+
+            _repo.AtualizarRegistro(registro);
+            _log.LogInformation(
+                "Registro {Id} atualizado pelo reprocessamento no servidor ({Turnos} turnos, revisão={Revisao})",
+                registro.Id, registro.Transcript.Segmentos.Count, registro.PrecisaRevisao);
+        }
+        else
+        {
+            registro.Id = _repo.SalvarRegistro(registro);
+            _log.LogInformation(
+                "Registro {Id} gravado a partir do servidor ({Turnos} turnos, revisão={Revisao})",
+                registro.Id, registro.Transcript.Segmentos.Count, registro.PrecisaRevisao);
+        }
 
         RegistroPronto?.Invoke(this, registro);
     }
