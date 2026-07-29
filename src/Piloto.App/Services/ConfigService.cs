@@ -13,7 +13,6 @@ public sealed class ConfigService
     public string ConfigDir { get; }
     public string CaminhoAppSettings => Path.Combine(ConfigDir, "appsettings.json");
     public string CaminhoListas => Path.Combine(ConfigDir, "listas.json");
-    public string CaminhoGlossario => Path.Combine(ConfigDir, "glossario.txt");
 
     public AppSettings Settings { get; private set; }
 
@@ -31,7 +30,7 @@ public sealed class ConfigService
         var userDir = Path.Combine(bootstrap.PastaDadosExpandida, "config");
         Directory.CreateDirectory(userDir);
 
-        foreach (var arquivo in new[] { "appsettings.json", "listas.json", "glossario.txt" })
+        foreach (var arquivo in new[] { "appsettings.json", "listas.json" })
         {
             var destino = Path.Combine(userDir, arquivo);
             var origem = Path.Combine(bundledDir, arquivo);
@@ -55,9 +54,6 @@ public sealed class ConfigService
 
     public ListasFechadas CarregarListas() => ListasFechadas.Load(CaminhoListas);
 
-    public string CarregarGlossario()
-        => File.Exists(CaminhoGlossario) ? File.ReadAllText(CaminhoGlossario) : string.Empty;
-
     public void SalvarSettings(AppSettings settings)
     {
         settings.Save(CaminhoAppSettings);
@@ -66,5 +62,4 @@ public sealed class ConfigService
 
     public void SalvarListas(ListasFechadas listas) => listas.Save(CaminhoListas);
 
-    public void SalvarGlossario(string texto) => File.WriteAllText(CaminhoGlossario, texto);
 }

@@ -49,9 +49,6 @@
     <Content Include="..\..\config\listas.json" Link="config\listas.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\config\glossario.txt" Link="config\glossario.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
 
   <!-- O target PreservarNativosLLamaSharpNoPublish saiu junto com o LLamaSharp. Ele

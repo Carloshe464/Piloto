@@ -102,7 +102,6 @@ Piloto/                         # nome do repositório; o produto é o Click Wri
 ├── config/
 │   ├── appsettings.json        # caminhos, modelo, retenção, porta do bridge
 │   ├── listas.json             # listas fechadas: motivo, produto, status
-│   └── glossario.txt           # initial_prompt do Whisper (nomes de produtos, jargão)
 ├── .github/workflows/build.yml # CI: build → testes → instalador → artifact/release
 └── README.md
 ```
@@ -166,7 +165,6 @@ Sem os modelos baixados o app abre normalmente, mas a fila fica pausada com o av
 | Listas fechadas (motivo, produto, status) | `config/listas.json` |
 | Regex e dicionários dos campos objetivos | `src/Piloto.Rules/` |
 | Prompt do resumo e schema JSON do LLM | `src/Piloto.Llm/Prompts/` |
-| Glossário que melhora o reconhecimento do Whisper | `config/glossario.txt` |
 | Modelo usado (base/small; Gemma/Llama) e threads | `config/appsettings.json` |
 | Seletores do DOM do Zendesk (inclui e-mail/telefone do cliente) | `extension/content-zendesk.js` → `SELETORES` |
 | Template do TXT exportado | `src/Piloto.Data/Export/` |

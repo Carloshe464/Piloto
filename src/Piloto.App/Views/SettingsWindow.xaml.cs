@@ -29,10 +29,6 @@ public partial class SettingsWindow : Window
         TxtMotivos.Text = string.Join(Environment.NewLine, listas.MotivoContato);
         TxtProdutos.Text = string.Join(Environment.NewLine, listas.Produto);
         TxtStatus.Text = string.Join(Environment.NewLine, listas.Status);
-        TxtGlossario.Text = _config.CarregarGlossario();
-
-        TxtRetAudio.Text = s.RetencaoDias.Audio.ToString(CultureInfo.InvariantCulture);
-        TxtRetTransc.Text = s.RetencaoDias.Transcricao.ToString(CultureInfo.InvariantCulture);
         TxtPorta.Text = s.Bridge.Porta.ToString(CultureInfo.InvariantCulture);
 
         TxtServidorUrl.Text = s.Servidor.Url;
@@ -127,11 +123,8 @@ public partial class SettingsWindow : Window
                 Status = Linhas(TxtStatus.Text),
             };
             _config.SalvarListas(listas);
-            _config.SalvarGlossario(TxtGlossario.Text);
 
             var s = _config.Settings;
-            s.RetencaoDias.Audio = ParseInt(TxtRetAudio.Text, s.RetencaoDias.Audio);
-            s.RetencaoDias.Transcricao = ParseInt(TxtRetTransc.Text, s.RetencaoDias.Transcricao);
             s.Bridge.Porta = ParseInt(TxtPorta.Text, s.Bridge.Porta);
             s.Servidor.Url = TxtServidorUrl.Text.Trim();
             s.Servidor.Token = TxtServidorToken.Text.Trim();

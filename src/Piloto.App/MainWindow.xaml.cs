@@ -178,6 +178,19 @@ public partial class MainWindow : Window
     private void ListaChamadas_SelectionChanged(object sender, SelectionChangedEventArgs e)
         => AtualizarEstadoSelecao();
 
+    private void RowCheckBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not CheckBox checkBox) return;
+
+        DependencyObject? atual = checkBox;
+        while (atual is not null && atual is not DataGridRow)
+            atual = VisualTreeHelper.GetParent(atual);
+
+        if (atual is not DataGridRow linha) return;
+        linha.IsSelected = !linha.IsSelected;
+        e.Handled = true;
+    }
+
     private void AtualizarEstadoSelecao()
     {
         if (!IsInitialized) return;
@@ -196,14 +209,16 @@ public partial class MainWindow : Window
             {
                 ["Fundo"] = "#D8D2C8", ["Painel"] = "#E6E0D6", ["PainelAlto"] = "#DCD6CC",
                 ["Entrada"] = "#E2DDD4", ["Borda"] = "#B9B0A4", ["BordaClara"] = "#9F978C",
-                ["Texto"] = "#303638", ["TextoFraco"] = "#5D625F", ["TextoApagado"] = "#85817A",
-                ["Acento"] = "#4E9FA7", ["AcentoClaro"] = "#23666E", ["AcentoFundo"] = "#C9DEDD",
-                ["BotaoFundo"] = "#D1E3E2", ["TabelaCabecalho"] = "#D6D0C6", ["Divisor"] = "#BBB3A7",
-                ["LinhaHover"] = "#D5E1DF", ["LinhaSelecionada"] = "#B8D4D2", ["BarraRolagem"] = "#918A80",
-                ["RecFundo"] = "#BED9D8", ["StopFundo"] = "#CFCCC6",
-                ["Sucesso"] = "#327A60", ["SucessoClaro"] = "#285F4D", ["SucessoFundo"] = "#C8D8CF",
-                ["Alerta"] = "#A8752B", ["AlertaClaro"] = "#654817", ["AlertaFundo"] = "#E5D4B6",
-                ["Perigo"] = "#AA4D55", ["PerigoClaro"] = "#83363D", ["PerigoFundo"] = "#E3C9CB",
+                ["Texto"] = "#202526", ["TextoFraco"] = "#414746", ["TextoApagado"] = "#66645F",
+                ["Acento"] = "#187E89", ["AcentoClaro"] = "#0B5962", ["AcentoFundo"] = "#B9D9D8",
+                ["BotaoFundo"] = "#C2DDDC", ["TabelaCabecalho"] = "#CCC4B8", ["Divisor"] = "#AFA69A",
+                ["LinhaHover"] = "#C8DBD8", ["LinhaSelecionada"] = "#A8CFCC", ["BarraRolagem"] = "#7F776E",
+                ["RecFundo"] = "#A7D3D1", ["StopFundo"] = "#C8C4BD",
+                ["PillAzulFundo"] = "#B9D2E5", ["PillVerdeFundo"] = "#BDD8C9",
+                ["PillAmbarFundo"] = "#E1C58B", ["PillRoxoFundo"] = "#D1BFE0",
+                ["Sucesso"] = "#237652", ["SucessoClaro"] = "#18583D", ["SucessoFundo"] = "#BDD8C9",
+                ["Alerta"] = "#B86500", ["AlertaClaro"] = "#3D2704", ["AlertaFundo"] = "#DDB45A",
+                ["Perigo"] = "#B93645", ["PerigoClaro"] = "#7C202C", ["PerigoFundo"] = "#E5B6BC",
             }
             : new Dictionary<string, string>
             {
@@ -214,6 +229,8 @@ public partial class MainWindow : Window
                 ["BotaoFundo"] = "#08111F", ["TabelaCabecalho"] = "#192438", ["Divisor"] = "#34435A",
                 ["LinhaHover"] = "#26364C", ["LinhaSelecionada"] = "#244B5D", ["BarraRolagem"] = "#6B7C93",
                 ["RecFundo"] = "#294E58", ["StopFundo"] = "#334155",
+                ["PillAzulFundo"] = "#13283D", ["PillVerdeFundo"] = "#10291E",
+                ["PillAmbarFundo"] = "#3A2A08", ["PillRoxoFundo"] = "#2A1D3A",
                 ["Sucesso"] = "#34D399", ["SucessoClaro"] = "#6EE7B7", ["SucessoFundo"] = "#10291E",
                 ["Alerta"] = "#FBBF24", ["AlertaClaro"] = "#FDE68A", ["AlertaFundo"] = "#3A2A08",
                 ["Perigo"] = "#F87171", ["PerigoClaro"] = "#FCA5A5", ["PerigoFundo"] = "#2A1420",

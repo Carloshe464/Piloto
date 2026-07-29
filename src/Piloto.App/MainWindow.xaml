@@ -32,7 +32,7 @@
             <Setter Property="MinHeight" Value="46" />
             <Setter Property="Padding" Value="18,9" />
             <Setter Property="Background" Value="{DynamicResource BotaoFundo}" />
-            <Setter Property="Foreground" Value="{DynamicResource AcentoClaro}" />
+            <Setter Property="Foreground" Value="{DynamicResource Texto}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Acento}" />
             <Setter Property="BorderThickness" Value="1.5" />
             <Setter Property="FontSize" Value="14" />
@@ -69,7 +69,7 @@
         </Style>
 
         <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource ActionButton}">
-            <Setter Property="Foreground" Value="{DynamicResource PerigoClaro}" />
+            <Setter Property="Foreground" Value="{DynamicResource Texto}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Perigo}" />
             <Setter Property="Background" Value="{DynamicResource PerigoFundo}" />
         </Style>
@@ -85,7 +85,7 @@
                         <Grid Width="22" Height="22">
                             <Border x:Name="Box" CornerRadius="5"
                                     Background="Transparent"
-                                    BorderBrush="{DynamicResource BordaClara}"
+                                    BorderBrush="{DynamicResource Acento}"
                                     BorderThickness="1.5" />
                             <Path x:Name="Check" Data="M 5,11 L 9,15 L 17,7"
                                   Stroke="{DynamicResource Fundo}"
@@ -223,7 +223,7 @@
             <Setter Property="Height" Value="50" />
             <Setter Property="Padding" Value="14,0" />
             <Setter Property="Background" Value="{DynamicResource TabelaCabecalho}" />
-            <Setter Property="Foreground" Value="{DynamicResource TextoFraco}" />
+            <Setter Property="Foreground" Value="{DynamicResource Texto}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Divisor}" />
             <Setter Property="BorderThickness" Value="0,0,1,1" />
             <Setter Property="FontSize" Value="12" />
@@ -269,7 +269,7 @@
         </Style>
 
         <Style x:Key="StatusPill" TargetType="Border">
-            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Background" Value="{DynamicResource PainelAlto}" />
             <Setter Property="BorderThickness" Value="1.5" />
             <Setter Property="CornerRadius" Value="18" />
             <Setter Property="Padding" Value="13,7" />
@@ -349,7 +349,7 @@
                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <TextBlock x:Name="TxtBanner" Grid.Column="1" Margin="12,1,0,0"
-                           TextWrapping="Wrap" Foreground="{DynamicResource AlertaClaro}"
+                           TextWrapping="Wrap" Foreground="{DynamicResource Texto}" FontWeight="SemiBold"
                            Text="Ligações aguardando envio ao servidor - subindo automaticamente." />
             </Grid>
         </Border>
@@ -511,6 +511,7 @@
                                 <CheckBox Style="{StaticResource CheckBoxLarge}"
                                           HorizontalAlignment="Center"
                                           ToolTip="Selecionar ligação"
+                                          PreviewMouseLeftButtonDown="RowCheckBox_PreviewMouseLeftButtonDown"
                                           IsChecked="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}, Mode=TwoWay}" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
@@ -554,28 +555,32 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <Border Style="{StaticResource StatusPill}" BorderBrush="#4FA7F8">
+                    <Border Style="{StaticResource StatusPill}" BorderBrush="#4FA7F8"
+                            Background="{DynamicResource PillAzulFundo}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="7" Height="7" Fill="#4FA7F8" Margin="0,0,7,0" VerticalAlignment="Center" />
-                            <TextBlock x:Name="TxtTotal" Text="Chamadas: 0" FontSize="12.5" Foreground="{DynamicResource TextoFraco}" />
+                            <TextBlock x:Name="TxtTotal" Text="Chamadas: 0" FontSize="12.5" Foreground="{DynamicResource Texto}" />
                         </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource StatusPill}" BorderBrush="{DynamicResource Sucesso}">
+                    <Border Style="{StaticResource StatusPill}" BorderBrush="{DynamicResource Sucesso}"
+                            Background="{DynamicResource PillVerdeFundo}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="7" Height="7" Fill="{DynamicResource Sucesso}" Margin="0,0,7,0" VerticalAlignment="Center" />
-                            <TextBlock x:Name="TxtTempo" Text="Tempo falado: 00:00:00" FontSize="12.5" Foreground="{DynamicResource TextoFraco}" />
+                            <TextBlock x:Name="TxtTempo" Text="Tempo falado: 00:00:00" FontSize="12.5" Foreground="{DynamicResource Texto}" />
                         </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource StatusPill}" BorderBrush="{DynamicResource Alerta}">
+                    <Border Style="{StaticResource StatusPill}" BorderBrush="{DynamicResource Alerta}"
+                            Background="{DynamicResource PillAmbarFundo}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="7" Height="7" Fill="{DynamicResource Alerta}" Margin="0,0,7,0" VerticalAlignment="Center" />
-                            <TextBlock x:Name="TxtRevisao" Text="A revisar: 0" FontSize="12.5" Foreground="{DynamicResource TextoFraco}" />
+                            <TextBlock x:Name="TxtRevisao" Text="A revisar: 0" FontSize="12.5" Foreground="{DynamicResource Texto}" />
                         </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource StatusPill}" BorderBrush="#C084FC">
+                    <Border Style="{StaticResource StatusPill}" BorderBrush="#9B59C5"
+                            Background="{DynamicResource PillRoxoFundo}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="7" Height="7" Fill="#C084FC" Margin="0,0,7,0" VerticalAlignment="Center" />
-                            <TextBlock x:Name="TxtFila" Text="Fila: 0" FontSize="12.5" Foreground="{DynamicResource TextoFraco}" />
+                            <TextBlock x:Name="TxtFila" Text="Fila: 0" FontSize="12.5" Foreground="{DynamicResource Texto}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -591,7 +596,10 @@
                         </StackPanel>
                     </Border>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" ToolTip="Click Digital">
-                        <TextBlock Text="CD" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AcentoClaro}" />
+                        <Border Width="36" Height="36" CornerRadius="18" Background="{DynamicResource Acento}">
+                            <TextBlock Text="CD" FontSize="14" FontWeight="Bold" Foreground="#F8FAFC"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
                         <StackPanel Margin="7,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="Click" FontSize="10" Foreground="{DynamicResource TextoFraco}" />
                             <TextBlock Text="Digital" FontSize="10" Foreground="{DynamicResource TextoFraco}" />
