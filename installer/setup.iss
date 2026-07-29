@@ -4,7 +4,7 @@
 #define MyAppName "Click Write"
 ; 1.1 — a transcrição passou para o servidor. O aplicativo grava, envia e abre o
 ; resultado no navegador. Saem daqui os modelos (~2,6 GB) e todo o processamento local.
-#define MyAppVersion "1.1.1"
+#define MyAppVersion "1.1.2"
 #define MyAppPublisher "Click Write"
 #define MyAppExeName "ClickWrite.exe"
 #define LogMonitorExe "ClickWrite.LogMonitor.exe"

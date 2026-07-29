@@ -20,8 +20,8 @@ public partial class MainWindow : Window
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Piloto", "logs");
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private List<LogEntry> _todos = new();
-    private bool _limpoPeloUsuario;
     private string _assinatura = "";
+    private readonly Dictionary<DateTime, int> _ocultarPrimeiros = new();
 
     public ObservableCollection<LogEntry> EventosVisiveis { get; } = new();
     public ObservableCollection<LogEntry> Erros { get; } = new();
@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = this;
+        FiltroData.SelectedDate = DateTime.Today;
         FiltroModulo.Items.Add("Todos os módulos");
         FiltroModulo.SelectedIndex = 0;
         _timer.Tick += (_, _) => Carregar();
@@ -39,25 +40,26 @@ public partial class MainWindow : Window
 
     private void Carregar()
     {
-        if (_limpoPeloUsuario) return;
         Directory.CreateDirectory(_pastaLogs);
-        var arquivos = Directory.EnumerateFiles(_pastaLogs, "piloto-*.log")
-            .OrderByDescending(File.GetLastWriteTimeUtc).Take(3).OrderBy(p => p).ToList();
-        var assinatura = string.Join("|", arquivos.Select(p =>
-        {
-            var info = new FileInfo(p);
-            return $"{p}:{info.Length}:{info.LastWriteTimeUtc.Ticks}";
-        }));
+        var data = DataSelecionada;
+        var arquivo = Path.Combine(_pastaLogs, $"piloto-{data:yyyyMMdd}.log");
+        var info = new FileInfo(arquivo);
+        var assinatura = info.Exists
+            ? $"{data:yyyyMMdd}:{info.Length}:{info.LastWriteTimeUtc.Ticks}"
+            : $"{data:yyyyMMdd}:ausente";
         if (assinatura == _assinatura) return;
         _assinatura = assinatura;
         var entradas = new List<LogEntry>();
-        foreach (var arquivo in arquivos)
+        if (info.Exists)
             LerArquivo(arquivo, entradas);
 
-        _todos = entradas;
+        var ocultar = _ocultarPrimeiros.GetValueOrDefault(data);
+        _todos = entradas.Skip(Math.Min(ocultar, entradas.Count)).ToList();
         AtualizarModulos();
         AplicarFiltro();
     }
+
+    private DateTime DataSelecionada => (FiltroData.SelectedDate ?? DateTime.Today).Date;
 
     private static void LerArquivo(string arquivo, List<LogEntry> destino)
     {
@@ -122,7 +124,7 @@ public partial class MainWindow : Window
                                                 && x.Descricao.Contains("grava", StringComparison.OrdinalIgnoreCase)).ToString();
         TotalEnvios.Text = _todos.Count(x => x.Descricao.Contains("enviada", StringComparison.OrdinalIgnoreCase)
                                             || x.Descricao.Contains("aceita pelo servidor", StringComparison.OrdinalIgnoreCase)).ToString();
-        Status.Text = $"{EventosVisiveis.Count} evento(s) exibido(s) | Pasta: {_pastaLogs}";
+        Status.Text = $"{EventosVisiveis.Count} evento(s) em {DataSelecionada:dd/MM/yyyy} | Pasta: {_pastaLogs}";
     }
 
     private static void Substituir(ObservableCollection<LogEntry> destino, IEnumerable<LogEntry> origem)
@@ -146,8 +148,31 @@ public partial class MainWindow : Window
         TabelaEventos.ScrollIntoView(item);
     }
 
-    private void Atualizar_Click(object sender, RoutedEventArgs e) { _limpoPeloUsuario = false; _assinatura = ""; Carregar(); }
-    private void Limpar_Click(object sender, RoutedEventArgs e) { _limpoPeloUsuario = true; _todos.Clear(); AplicarFiltro(); }
+    private void Atualizar_Click(object sender, RoutedEventArgs e)
+    {
+        _assinatura = "";
+        if (DataSelecionada != DateTime.Today)
+            FiltroData.SelectedDate = DateTime.Today;
+        else
+            Carregar();
+    }
+    private void Limpar_Click(object sender, RoutedEventArgs e)
+    {
+        var data = DataSelecionada;
+        _ocultarPrimeiros[data] = _ocultarPrimeiros.GetValueOrDefault(data) + _todos.Count;
+        _todos.Clear();
+        DetalheEvento.Clear();
+        TituloDetalhe.Text = "Detalhes do evento selecionado";
+        AplicarFiltro();
+    }
+    private void FiltroData_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _assinatura = "";
+        DetalheEvento.Clear();
+        TituloDetalhe.Text = "Detalhes do evento selecionado";
+        Carregar();
+    }
     private void ExibirErros_Click(object sender, RoutedEventArgs e) => Abas.SelectedIndex = 2;
     private void Filtro_Changed(object sender, SelectionChangedEventArgs e) { if (IsLoaded) AplicarFiltro(); }
     private void Busca_TextChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) AplicarFiltro(); }

@@ -32,17 +32,23 @@
         </Grid>
 
         <Grid Grid.Row="1" Margin="-4,0,-4,10">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <ComboBox x:Name="FiltroNivel" Width="150" SelectionChanged="Filtro_Changed">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Data" Margin="6,0,0,1" FontSize="11" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextoFraco}" />
+                <DatePicker x:Name="FiltroData" Width="145" SelectedDateFormat="Short"
+                            SelectedDateChanged="FiltroData_Changed" />
+            </StackPanel>
+            <ComboBox x:Name="FiltroNivel" Grid.Column="1" Width="150" VerticalAlignment="Bottom" SelectionChanged="Filtro_Changed">
                 <ComboBoxItem Content="Todos os níveis" IsSelected="True" />
                 <ComboBoxItem Content="Information" />
                 <ComboBoxItem Content="Warning" />
                 <ComboBoxItem Content="Error" />
             </ComboBox>
-            <ComboBox x:Name="FiltroModulo" Grid.Column="1" Width="180" SelectionChanged="Filtro_Changed" />
-            <TextBox x:Name="Busca" Grid.Column="2" TextChanged="Busca_TextChanged" ToolTip="Buscar na descrição ou nos detalhes" />
-            <StackPanel Grid.Column="3" Orientation="Horizontal">
-                <Button Content="Atualizar" Click="Atualizar_Click" />
+            <ComboBox x:Name="FiltroModulo" Grid.Column="2" Width="180" VerticalAlignment="Bottom" SelectionChanged="Filtro_Changed" />
+            <TextBox x:Name="Busca" Grid.Column="3" VerticalAlignment="Bottom" TextChanged="Busca_TextChanged" ToolTip="Buscar na descrição ou nos detalhes" />
+            <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Bottom">
+                <Button Content="Atualizar" Click="Atualizar_Click" ToolTip="Voltar para hoje e buscar novos eventos" />
                 <Button Content="Abrir pasta" Click="AbrirPasta_Click" />
             </StackPanel>
         </Grid>
