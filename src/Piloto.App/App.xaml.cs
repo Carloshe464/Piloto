@@ -96,6 +96,16 @@ public partial class App : Application
             coordinator.EstadoGravacaoMudou += (_, gravando) =>
                 Dispatcher.Invoke(() => _tray!.AtualizarGravacao(gravando));
 
+            // A captura automática começa e termina sozinha: o atendente precisa saber, e o
+            // ícone da bandeja mudando de cor passa despercebido no meio do atendimento.
+            // Também é o que dá a ele a chance de usar "não gravar esta chamada" a tempo.
+            coordinator.CapturaAutomaticaMudou += (_, gravando) => Dispatcher.Invoke(() =>
+                _tray!.Notificar(
+                    gravando ? "Click Write — gravando" : "Click Write — gravação encerrada",
+                    gravando
+                        ? "A ligação começou e está sendo gravada automaticamente."
+                        : "A gravação terminou e será enviada ao servidor."));
+
             coordinator.AvisoCaptura += (_, msg) =>
                 Dispatcher.Invoke(() => _tray!.Notificar("Click Write — captura de áudio", msg));
 

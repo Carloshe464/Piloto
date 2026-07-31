@@ -12,6 +12,7 @@ public sealed class AppSettings
     public ServidorSettings Servidor { get; set; } = new();
     public BridgeSettings Bridge { get; set; } = new();
     public AudioSettings Audio { get; set; } = new();
+    public CapturaSettings Captura { get; set; } = new();
     public RetencaoSettings RetencaoDias { get; set; } = new();
 
     /// <summary>Pode conter variáveis de ambiente no formato %VAR% (Windows).</summary>
@@ -118,6 +119,25 @@ public sealed class AudioSettings
     public string ProcessoNavegador { get; set; } = "chrome";
     public string Formato { get; set; } = "wav";
     public int TaxaHz { get; set; } = 16000;
+}
+
+public sealed class CapturaSettings
+{
+    /// <summary>
+    /// Quanto esperar, depois que a ligação encerra, pelo ticket e pelo telefone antes de
+    /// enviar a gravação ao servidor.
+    /// <para>
+    /// O ticket costuma ser aberto alguns segundos DEPOIS de a chamada cair, e o servidor
+    /// grava ticket e telefone no instante em que o áudio é enfileirado — não existe forma
+    /// de completá-los depois. Sem esta espera, justamente a ligação que tem ticket sobe
+    /// sem ele.
+    /// </para>
+    /// <para>
+    /// A espera termina antes do prazo assim que os dois dados chegam; o valor aqui é só o
+    /// teto. Zero desliga e envia na hora, como era antes.
+    /// </para>
+    /// </summary>
+    public int EsperaIdentificacaoSegundos { get; set; } = 15;
 }
 
 // WhisperSettings, LlmSettings e FilaSettings saíram na 1.1: modelo, threads,

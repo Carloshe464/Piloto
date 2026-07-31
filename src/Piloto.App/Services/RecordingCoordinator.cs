@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Piloto.Audio;
 using Piloto.Bridge;
 using Piloto.Core.Abstractions;
+using Piloto.Core.Configuration;
 using Piloto.Core.Models;
 using Piloto.Core.Services;
 
@@ -12,18 +14,38 @@ namespace Piloto.App.Services;
 /// WASAPI manual (botão) e a captura automática pela extensão (hook WebRTC) — esta começa
 /// e termina sozinha nas fronteiras reais da chamada e enfileira ao encerrar.
 /// </summary>
-public sealed class RecordingCoordinator
+public sealed class RecordingCoordinator : IDisposable
 {
+    /// <summary>De quanto em quanto tempo reconfere se ticket e telefone já chegaram.</summary>
+    private static readonly TimeSpan IntervaloVerificacao = TimeSpan.FromMilliseconds(500);
+
     private readonly IAudioRecorder _recorder;
     private readonly ExtensionAudioRecorder _extensao;
     private readonly ClickWriteUploader _uploader;
     private readonly SincronizadorServidor _sincronizador;
     private readonly ZendeskBridgeServer _bridge;
     private readonly ICallRepository _repo;
+    private readonly AppSettings _settings;
     private readonly ILogger<RecordingCoordinator> _log;
     private readonly object _lock = new();
 
     private CallMetadata _metadataCorrente = CallMetadata.Vazio();
+    private EsperaIdentificacao? _espera;
+
+    /// <summary>
+    /// Uma captura encerrada que ainda não subiu, à espera do ticket. Vive fora do
+    /// <see cref="_metadataCorrente"/> de propósito: o áudio já está fechado em disco e não
+    /// pode ser contaminado se o atendente atender outra ligação durante a espera.
+    /// </summary>
+    private sealed class EsperaIdentificacao
+    {
+        public required AudioCapture Captura { get; init; }
+        public required string Origem { get; init; }
+
+        /// <summary>0 = esperando, 1 = já enviada. Manipulado por <c>Interlocked</c>:
+        /// o prazo e uma chamada nova podem concluí-la ao mesmo tempo.</summary>
+        public int Concluida;
+    }
 
     /// <summary>Estado do gravador manual (botão da UI); a sessão da extensão é
     /// autônoma e sinalizada apenas via <see cref="EstadoGravacaoMudou"/>.</summary>
@@ -31,6 +53,17 @@ public sealed class RecordingCoordinator
     public CallMetadata MetadataCorrente { get { lock (_lock) return _metadataCorrente; } }
 
     public event EventHandler<bool>? EstadoGravacaoMudou;
+
+    /// <summary>
+    /// A captura automática começou (<c>true</c>) ou terminou (<c>false</c>).
+    /// <para>
+    /// Existe separado de <see cref="EstadoGravacaoMudou"/> porque só a captura automática
+    /// precisa de aviso visível: na gravação manual o atendente acabou de clicar no botão e
+    /// já sabe. Trocar o ícone da bandeja não basta para a automática — ela começa sozinha,
+    /// e ninguém repara num ícone de 16 px mudando de cor enquanto atende.
+    /// </para>
+    /// </summary>
+    public event EventHandler<bool>? CapturaAutomaticaMudou;
     public event EventHandler<string>? AvisoCaptura;
     public event EventHandler? MetadataMudou;
     public event EventHandler<CallRecord>? RegistroProvisorioCriado;
@@ -48,6 +81,7 @@ public sealed class RecordingCoordinator
         SincronizadorServidor sincronizador,
         ZendeskBridgeServer bridge,
         ICallRepository repo,
+        AppSettings settings,
         ILogger<RecordingCoordinator> log)
     {
         _recorder = recorder;
@@ -56,6 +90,7 @@ public sealed class RecordingCoordinator
         _sincronizador = sincronizador;
         _bridge = bridge;
         _repo = repo;
+        _settings = settings;
         _log = log;
 
         _recorder.EstadoGravacaoMudou += (_, gravando) => EstadoGravacaoMudou?.Invoke(this, gravando);
@@ -116,6 +151,10 @@ public sealed class RecordingCoordinator
         if (_extensao.Ativa)
             EncerrarSessaoExtensao();
 
+        // A ligação que começa agora não pode herdar o ticket da anterior, nem deixá-la
+        // esperando indefinidamente: daqui para frente o que chegar é da chamada nova.
+        ConcluirEsperaPendente();
+
         CallMetadata snapshot;
         lock (_lock)
         {
@@ -127,6 +166,7 @@ public sealed class RecordingCoordinator
             "Gravação automática iniciada pela extensão (ticket {Ticket}, telefone {Telefone})",
             snapshot.TicketId ?? "-", snapshot.TelefoneCliente ?? snapshot.Numero ?? "-");
         EstadoGravacaoMudou?.Invoke(this, true);
+        CapturaAutomaticaMudou?.Invoke(this, true);
     }
 
     private void EncerrarSessaoExtensao()
@@ -135,12 +175,120 @@ public sealed class RecordingCoordinator
 
         var captura = _extensao.Encerrar();
         EstadoGravacaoMudou?.Invoke(this, false);
+        CapturaAutomaticaMudou?.Invoke(this, false);
         if (captura is null) return;
 
-        CompletarMetadata(captura.Metadata);
         _log.LogInformation("Gravação automática encerrada ({Duracao})", captura.Duracao);
-        Enviar(captura, "captura automática pela extensão");
+        AguardarIdentificacao(captura, "captura automática pela extensão");
+    }
+
+    /// <summary>
+    /// Segura a captura até ticket e telefone chegarem, e só então envia.
+    /// <para>
+    /// O ticket é aberto alguns segundos DEPOIS de a ligação cair, e o servidor grava
+    /// ticket e telefone no instante do enfileiramento — o <c>PATCH</c> de correção alcança
+    /// campos objetivos e resumo, mas não os metadados. Enviar na hora do encerramento,
+    /// como era antes, entregava sem ticket exatamente a ligação que tinha um.
+    /// </para>
+    /// <para>
+    /// Não bloqueia: quem chama é o callback do bridge, e prendê-lo travaria o recebimento
+    /// da próxima chamada. A espera corre em segundo plano e termina assim que os dois
+    /// dados aparecem — o prazo do <c>appsettings.json</c> é teto, não atraso fixo.
+    /// </para>
+    /// </summary>
+    private void AguardarIdentificacao(AudioCapture captura, string origem)
+    {
+        // Espera anterior ainda de pé (duas ligações em sequência muito rápida): fecha a
+        // antiga primeiro, com o que ela tiver. Duas disputando o mesmo _metadataCorrente
+        // trocariam o ticket de uma pela da outra.
+        ConcluirEsperaPendente();
+
+        var espera = new EsperaIdentificacao { Captura = captura, Origem = origem };
+        Interlocked.Exchange(ref _espera, espera);
+
+        var limite = TimeSpan.FromSeconds(Math.Max(0, _settings.Captura.EsperaIdentificacaoSegundos));
+        if (limite <= TimeSpan.Zero)
+        {
+            Concluir(espera);
+            return;
+        }
+
+        if (Identificada())
+        {
+            // O ticket já estava na tela quando a ligação caiu. Nada a esperar.
+            Concluir(espera);
+            return;
+        }
+
+        _log.LogInformation(
+            "Aguardando até {Segundos:0}s pelo ticket antes de enviar a gravação",
+            limite.TotalSeconds);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var relogio = Stopwatch.StartNew();
+                while (relogio.Elapsed < limite && Volatile.Read(ref espera.Concluida) == 0)
+                {
+                    if (Identificada())
+                    {
+                        _log.LogInformation("Ticket identificado após {Segundos:0.0}s de espera",
+                                            relogio.Elapsed.TotalSeconds);
+                        break;
+                    }
+                    await Task.Delay(IntervaloVerificacao).ConfigureAwait(false);
+                }
+
+                if (!Identificada())
+                    _log.LogWarning(
+                        "Prazo de {Segundos:0}s esgotado sem ticket — enviando com o que há",
+                        limite.TotalSeconds);
+            }
+            catch (Exception ex)
+            {
+                // A gravação nunca pode ficar presa por causa da espera: qualquer falha
+                // aqui cai direto no envio.
+                _log.LogError(ex, "Falha ao aguardar o ticket; enviando a gravação assim mesmo");
+            }
+            finally
+            {
+                Concluir(espera);
+            }
+        });
+    }
+
+    /// <summary>Ticket e telefone já conhecidos — não há mais o que esperar.</summary>
+    private bool Identificada()
+    {
+        lock (_lock)
+            return !string.IsNullOrWhiteSpace(_metadataCorrente.TicketId)
+                && !string.IsNullOrWhiteSpace(_metadataCorrente.TelefoneCliente
+                                              ?? _metadataCorrente.Numero);
+    }
+
+    /// <summary>
+    /// Completa os metadados e envia. Idempotente: o prazo, uma ligação nova e o
+    /// encerramento do app podem chegar aqui ao mesmo tempo, e só o primeiro envia.
+    /// </summary>
+    private void Concluir(EsperaIdentificacao espera)
+    {
+        if (Interlocked.Exchange(ref espera.Concluida, 1) == 1) return;
+        Interlocked.CompareExchange(ref _espera, null, espera);
+
+        CompletarMetadata(espera.Captura.Metadata);
         LimparMetadata();
+        Enviar(espera.Captura, espera.Origem);
+    }
+
+    /// <summary>
+    /// Fecha na hora a captura que estiver esperando. Chamado quando a espera perde o
+    /// sentido: outra ligação começou, o atendente mandou enviar, ou o app está fechando.
+    /// </summary>
+    public void ConcluirEsperaPendente()
+    {
+        if (Volatile.Read(ref _espera) is { } pendente)
+            Concluir(pendente);
     }
 
     /// <summary>
@@ -246,6 +394,10 @@ public sealed class RecordingCoordinator
     /// <summary>Para a gravação e envia ao servidor. O resultado chega por evento.</summary>
     public void PararEEnviar()
     {
+        // Clique explícito em "enviar" encerra qualquer espera: o atendente mandou subir
+        // agora, e continuar contando o prazo contrariaria a ordem dele.
+        ConcluirEsperaPendente();
+
         var captura = _extensao.Ativa ? _extensao.Encerrar() : _recorder.Parar();
         if (captura is null) return;
         CompletarMetadata(captura.Metadata);
@@ -304,4 +456,15 @@ public sealed class RecordingCoordinator
         IniciadaEm = origem.IniciadaEm,
         EncerradaEm = origem.EncerradaEm,
     };
+
+    /// <summary>
+    /// App fechando: envia na hora o que estava esperando ticket.
+    /// <para>
+    /// Sem isto, fechar o programa durante a espera abandonaria a captura — o áudio ficaria
+    /// em disco sem registro nenhum e sem ninguém para reenviá-lo, porque o item da fila só
+    /// nasce dentro de <see cref="Enviar"/>. Perder a ligação para ganhar o ticket seria um
+    /// mau negócio.
+    /// </para>
+    /// </summary>
+    public void Dispose() => ConcluirEsperaPendente();
 }

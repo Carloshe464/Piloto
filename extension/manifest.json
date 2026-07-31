@@ -7,6 +7,7 @@
   "host_permissions": [
     "*://*.zendesk.com/*",
     "*://*.55pbx.com/*",
+    "*://*.55pbx.com.br/*",
     "http://127.0.0.1/*"
   ],
   "background": {
@@ -19,14 +20,14 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["*://*.zendesk.com/*", "*://*.55pbx.com/*"],
+      "matches": ["*://*.zendesk.com/*", "*://*.55pbx.com/*", "*://*.55pbx.com.br/*"],
       "js": ["rtc-hook.js"],
       "run_at": "document_start",
       "all_frames": true,
       "world": "MAIN"
     },
     {
-      "matches": ["*://*.zendesk.com/*", "*://*.55pbx.com/*"],
+      "matches": ["*://*.zendesk.com/*", "*://*.55pbx.com/*", "*://*.55pbx.com.br/*"],
       "js": ["content-audio.js"],
       "run_at": "document_start",
       "all_frames": true
